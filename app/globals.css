@@ -22,3 +22,30 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  padding: 0.72rem 0.9rem;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.input:focus {
+  border-color: #0f172a;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+}
+
+.file-input {
+  display: block;
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  padding: 0.72rem 0.9rem;
+  color: #475569;
+  font-size: 0.875rem;
+}

@@ -18,3 +18,17 @@ Starter Next.js + Supabase application for the Aviation Passport project.
 ## First run
 
 See `SETUP-WINDOWS.md`.
+
+## V0.2 — Passport editor
+
+The `/passport` area now includes the first real database-backed worker Passport editor:
+
+- Professional Identity
+- nationality and work rights
+- Licences & Ratings with private evidence upload
+- Employment & Environment
+- Aircraft family / variant / engine exposure
+- exposure level and recency
+- calculated blue dot / gold star / green shield Passport preview
+
+Run `SUPABASE-UPDATE-V0.2.sql` once before using credential uploads.
