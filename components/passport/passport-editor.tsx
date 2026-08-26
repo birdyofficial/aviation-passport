@@ -147,6 +147,41 @@ const emptyProfile: IdentityForm = {
   nationality_visibility: "visible",
 };
 
+const AIRCRAFT_MANUFACTURER_ORDER = [
+  "Boeing",
+  "Airbus",
+  "Airbus Helicopters",
+  "ATR",
+  "Embraer",
+  "Bombardier",
+  "De Havilland Canada",
+  "COMAC",
+  "Fokker",
+  "Saab",
+  "Bell",
+  "Leonardo",
+  "Sikorsky",
+  "NHIndustries",
+  "Eurofighter",
+];
+
+const ENVIRONMENT_ORDER = [
+  "line_maintenance",
+  "base_maintenance",
+  "heavy_maintenance",
+  "production",
+  "final_assembly",
+  "prototype_development",
+  "flight_test",
+  "modification_retrofit",
+  "component_workshop",
+  "engine_shop",
+  "structures",
+  "mro_support",
+  "field_support",
+  "other",
+];
+
 function cleanCountryCode(value: string) {
   return value.trim().toUpperCase().slice(0, 2);
 }
@@ -224,6 +259,8 @@ export default function PassportEditor() {
   const [variantEngines, setVariantEngines] = useState<VariantEngine[]>([]);
 
   const [identityForm, setIdentityForm] = useState<IdentityForm>(emptyProfile);
+  const [editingLicenceId, setEditingLicenceId] = useState<string | null>(null);
+  const [editingRatingId, setEditingRatingId] = useState<string | null>(null);
   const [workRightForm, setWorkRightForm] = useState({
     country_code: "",
     status: "unrestricted" as WorkRight["status"],
@@ -263,7 +300,6 @@ export default function PassportEditor() {
     start_date: "",
     end_date: "",
     is_current: false,
-    description: "",
     environment_ids: [] as number[],
   });
   const [exposureForm, setExposureForm] = useState({
@@ -276,7 +312,7 @@ export default function PassportEditor() {
     exposure: "regular" as Exposure["exposure"],
     exposure_start: "",
     exposure_end: "",
-    last_worked_on: "",
+    is_current: false,
   });
 
   async function loadData() {
@@ -531,13 +567,127 @@ export default function PassportEditor() {
     }
   }
 
+  function resetLicenceForm() {
+    setEditingLicenceId(null);
+    setLicenceForm({
+      issuing_country_code: "",
+      authority_id: "",
+      custom_authority_name: "",
+      licence_system_code: "",
+      custom_licence_system: "",
+      category_privileges: "",
+      licence_number: "",
+      issued_on: "",
+      expires_on: "",
+      limitations: "",
+      evidence: null,
+    });
+  }
+
+  function editLicence(licence: Licence) {
+    const knownSystem = LICENCE_SYSTEMS.find((item) => item.code !== "OTHER" && item.label === licence.licence_scheme);
+    setEditingLicenceId(licence.id);
+    setLicenceForm({
+      issuing_country_code: licence.issuing_country_code ?? "",
+      authority_id: licence.authority_id ?? "__custom__",
+      custom_authority_name: licence.authority_id ? "" : licence.issuing_authority_name ?? "",
+      licence_system_code: knownSystem?.code ?? "OTHER",
+      custom_licence_system: knownSystem ? "" : licence.licence_scheme,
+      category_privileges: licence.category_privileges ?? "",
+      licence_number: licence.licence_number ?? "",
+      issued_on: licence.issued_on ?? "",
+      expires_on: licence.expires_on ?? "",
+      limitations: licence.limitations ?? "",
+      evidence: null,
+    });
+    setNotice(licence.verification_status === "verified"
+      ? { type: "success", text: "Editing this verified licence will return it to verification pending when saved." }
+      : null);
+  }
+
+  async function removeLicence(licence: Licence) {
+    if (!window.confirm("Remove this licence and all ratings linked to it?")) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const linkedRatings = ratings.filter((rating) => rating.licence_id === licence.id);
+      const evidencePaths = [licence.evidence_path, ...linkedRatings.map((rating) => rating.evidence_path)].filter(Boolean) as string[];
+      const { error } = await supabase.from("worker_licences").delete().eq("id", licence.id);
+      if (error) throw error;
+      if (evidencePaths.length) {
+        await supabase.storage.from("credential-evidence").remove(evidencePaths);
+      }
+      if (editingLicenceId === licence.id) resetLicenceForm();
+      if (linkedRatings.some((rating) => rating.id === editingRatingId)) resetRatingForm();
+      setNotice({ type: "success", text: "Licence removed." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove licence." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resetRatingForm() {
+    setEditingRatingId(null);
+    setRatingForm({
+      licence_id: "",
+      official_designation: "",
+      privilege_category: "",
+      aircraft_family_id: "",
+      custom_aircraft_family: "",
+      aircraft_variant_id: "",
+      engine_id: "",
+      evidence: null,
+    });
+  }
+
+  function editRating(rating: Rating) {
+    setEditingRatingId(rating.id);
+    setRatingForm({
+      licence_id: rating.licence_id,
+      official_designation: rating.official_designation,
+      privilege_category: rating.privilege_category ?? "",
+      aircraft_family_id: rating.aircraft_family_id ?? (rating.custom_aircraft_family ? "__custom__" : ""),
+      custom_aircraft_family: rating.custom_aircraft_family ?? "",
+      aircraft_variant_id: rating.aircraft_variant_id ?? "",
+      engine_id: rating.engine_id ?? "",
+      evidence: null,
+    });
+    setNotice(rating.verification_status === "verified"
+      ? { type: "success", text: "Editing this verified rating will remove the gold star until the updated rating is reviewed again." }
+      : null);
+  }
+
+  async function removeRating(rating: Rating) {
+    if (!window.confirm("Remove this aircraft rating?")) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await supabase.from("licence_ratings").delete().eq("id", rating.id);
+      if (error) throw error;
+      if (rating.evidence_path) {
+        await supabase.storage.from("credential-evidence").remove([rating.evidence_path]);
+      }
+      if (editingRatingId === rating.id) resetRatingForm();
+      setNotice({ type: "success", text: "Rating removed." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove rating." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addLicence(event: FormEvent) {
     event.preventDefault();
     if (!profile || !userId) return;
     setBusy(true);
     setNotice(null);
     try {
-      const evidencePath = await uploadEvidence(licenceForm.evidence, "licences");
+      const existingLicence = editingLicenceId ? licences.find((item) => item.id === editingLicenceId) : null;
+      const uploadedEvidence = licenceForm.evidence ? await uploadEvidence(licenceForm.evidence, "licences") : null;
+      const evidencePath = uploadedEvidence ?? existingLicence?.evidence_path ?? null;
       const selectedAuthority = authorities.find((item) => item.id === licenceForm.authority_id);
       const selectedSystem = LICENCE_SYSTEMS.find((item) => item.code === licenceForm.licence_system_code);
       const licenceSystem = licenceForm.licence_system_code === "OTHER"
@@ -545,8 +695,8 @@ export default function PassportEditor() {
         : selectedSystem?.label ?? "";
       if (!licenceSystem) throw new Error("Select or enter the licence system.");
       if (!selectedAuthority && !licenceForm.custom_authority_name.trim()) throw new Error("Select or enter the issuing authority.");
-      const { error } = await supabase.from("worker_licences").insert({
-        worker_id: userId,
+
+      const payload = {
         authority_id: selectedAuthority?.id ?? null,
         issuing_country_code: licenceForm.issuing_country_code || selectedAuthority?.country_code || null,
         issuing_authority_name: selectedAuthority?.name ?? licenceForm.custom_authority_name.trim(),
@@ -557,13 +707,24 @@ export default function PassportEditor() {
         expires_on: licenceForm.expires_on || null,
         limitations: licenceForm.limitations.trim() || null,
         evidence_path: evidencePath,
-      });
-      if (error) throw error;
-      setLicenceForm({ issuing_country_code: "", authority_id: "", custom_authority_name: "", licence_system_code: "", custom_licence_system: "", category_privileges: "", licence_number: "", issued_on: "", expires_on: "", limitations: "", evidence: null });
-      setNotice({ type: "success", text: "Licence submitted. Verification is pending." });
+      };
+
+      const result = editingLicenceId
+        ? await supabase.from("worker_licences").update(payload).eq("id", editingLicenceId)
+        : await supabase.from("worker_licences").insert({ worker_id: userId, ...payload });
+
+      if (result.error) throw result.error;
+
+      if (uploadedEvidence && existingLicence?.evidence_path && existingLicence.evidence_path !== uploadedEvidence) {
+        await supabase.storage.from("credential-evidence").remove([existingLicence.evidence_path]);
+      }
+
+      const wasEditing = Boolean(editingLicenceId);
+      resetLicenceForm();
+      setNotice({ type: "success", text: wasEditing ? "Licence updated. Verification has returned to pending." : "Licence submitted. Verification is pending." });
       await loadData();
     } catch (error) {
-      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not add licence." });
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save licence." });
     } finally {
       setBusy(false);
     }
@@ -575,8 +736,11 @@ export default function PassportEditor() {
     setBusy(true);
     setNotice(null);
     try {
-      const evidencePath = await uploadEvidence(ratingForm.evidence, "ratings");
-      const { error } = await supabase.from("licence_ratings").insert({
+      const existingRating = editingRatingId ? ratings.find((item) => item.id === editingRatingId) : null;
+      const uploadedEvidence = ratingForm.evidence ? await uploadEvidence(ratingForm.evidence, "ratings") : null;
+      const evidencePath = uploadedEvidence ?? existingRating?.evidence_path ?? null;
+
+      const payload = {
         licence_id: ratingForm.licence_id,
         official_designation: ratingForm.official_designation.trim(),
         privilege_category: ratingForm.privilege_category.trim() || null,
@@ -585,13 +749,24 @@ export default function PassportEditor() {
         aircraft_variant_id: ratingForm.aircraft_family_id === "__custom__" ? null : ratingForm.aircraft_variant_id || null,
         engine_id: ratingForm.engine_id || null,
         evidence_path: evidencePath,
-      });
-      if (error) throw error;
-      setRatingForm({ licence_id: "", official_designation: "", privilege_category: "", aircraft_family_id: "", custom_aircraft_family: "", aircraft_variant_id: "", engine_id: "", evidence: null });
-      setNotice({ type: "success", text: "Rating submitted. The gold star appears only after verification." });
+      };
+
+      const result = editingRatingId
+        ? await supabase.from("licence_ratings").update(payload).eq("id", editingRatingId)
+        : await supabase.from("licence_ratings").insert(payload);
+
+      if (result.error) throw result.error;
+
+      if (uploadedEvidence && existingRating?.evidence_path && existingRating.evidence_path !== uploadedEvidence) {
+        await supabase.storage.from("credential-evidence").remove([existingRating.evidence_path]);
+      }
+
+      const wasEditing = Boolean(editingRatingId);
+      resetRatingForm();
+      setNotice({ type: "success", text: wasEditing ? "Rating updated. The gold star is removed until re-verification." : "Rating submitted. The gold star appears only after verification." });
       await loadData();
     } catch (error) {
-      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not add rating." });
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save rating." });
     } finally {
       setBusy(false);
     }
@@ -616,7 +791,7 @@ export default function PassportEditor() {
           start_date: employmentForm.start_date,
           end_date: employmentForm.is_current ? null : employmentForm.end_date || null,
           is_current: employmentForm.is_current,
-          description: employmentForm.description.trim() || null,
+          description: null,
         })
         .select("id")
         .single();
@@ -632,7 +807,7 @@ export default function PassportEditor() {
         if (envError) throw envError;
       }
 
-      setEmploymentForm({ employer_name: "", job_title: "", discipline: "", city: "", country_code: "", employment_type: "permanent", start_date: "", end_date: "", is_current: false, description: "", environment_ids: [] });
+      setEmploymentForm({ employer_name: "", job_title: "", discipline: "", city: "", country_code: "", employment_type: "permanent", start_date: "", end_date: "", is_current: false, environment_ids: [] });
       setNotice({ type: "success", text: "Employment record added. Now attach aircraft exposure to it." });
       await loadData();
     } catch (error) {
@@ -658,11 +833,11 @@ export default function PassportEditor() {
         discipline: exposureForm.discipline.trim() || null,
         exposure: exposureForm.exposure,
         exposure_start: exposureForm.exposure_start || null,
-        exposure_end: exposureForm.exposure_end || null,
-        last_worked_on: exposureForm.last_worked_on || null,
+        exposure_end: exposureForm.is_current ? null : exposureForm.exposure_end || null,
+        last_worked_on: null,
       });
       if (error) throw error;
-      setExposureForm({ employment_id: "", aircraft_family_id: "", custom_aircraft_family: "", aircraft_variant_id: "", engine_id: "", discipline: "", exposure: "regular", exposure_start: "", exposure_end: "", last_worked_on: "" });
+      setExposureForm({ employment_id: "", aircraft_family_id: "", custom_aircraft_family: "", aircraft_variant_id: "", engine_id: "", discipline: "", exposure: "regular", exposure_start: "", exposure_end: "", is_current: false });
       setNotice({ type: "success", text: "Aircraft experience added — the blue dot is now derived from this record." });
       await loadData();
       setTab("preview");
@@ -695,6 +870,38 @@ export default function PassportEditor() {
   const authorityById = useMemo(() => Object.fromEntries(authorities.map((item) => [item.id, item])), [authorities]);
   const employmentById = useMemo(() => Object.fromEntries(employments.map((item) => [item.id, item])), [employments]);
   const environmentById = useMemo(() => Object.fromEntries(environments.map((item) => [item.id, item])), [environments]);
+
+  const sortedEnvironments = useMemo(() => {
+    const rank = new Map(ENVIRONMENT_ORDER.map((code, index) => [code, index]));
+    return [...environments].sort((a, b) => {
+      const aRank = rank.get(a.code) ?? 999;
+      const bRank = rank.get(b.code) ?? 999;
+      return aRank - bRank || a.label.localeCompare(b.label);
+    });
+  }, [environments]);
+
+  const aircraftFamilyGroups = useMemo(() => {
+    const preferredRank = new Map(AIRCRAFT_MANUFACTURER_ORDER.map((name, index) => [name, index]));
+    const grouped = new Map<string, AircraftFamily[]>();
+
+    for (const family of families) {
+      const manufacturerName = manufacturerById[family.manufacturer_id]?.name ?? "Other";
+      const group = grouped.get(manufacturerName) ?? [];
+      group.push(family);
+      grouped.set(manufacturerName, group);
+    }
+
+    return [...grouped.entries()]
+      .map(([manufacturerName, groupFamilies]) => ({
+        manufacturerName,
+        families: [...groupFamilies].sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { numeric: true })),
+      }))
+      .sort((a, b) => {
+        const aRank = preferredRank.get(a.manufacturerName) ?? 999;
+        const bRank = preferredRank.get(b.manufacturerName) ?? 999;
+        return aRank - bRank || a.manufacturerName.localeCompare(b.manufacturerName);
+      });
+  }, [families, manufacturerById]);
 
   const filteredRatingVariants = ratingForm.aircraft_family_id === "__custom__" ? [] : variants.filter((item) => item.family_id === ratingForm.aircraft_family_id);
   const filteredExposureVariants = exposureForm.aircraft_family_id === "__custom__" ? [] : variants.filter((item) => item.family_id === exposureForm.aircraft_family_id);
@@ -831,7 +1038,8 @@ export default function PassportEditor() {
               {aircraftSummary.length ? (
                 <div className="mt-4 flex flex-wrap gap-2.5">
                   {aircraftSummary.map(({ key, label, manufacturerName, exposure, rated, authorised }) => {
-                    const latest = exposure.map((item) => item.last_worked_on).filter(Boolean).sort().at(-1) ?? null;
+                    const hasCurrentExposure = exposure.some((item) => !item.exposure_end);
+                    const latestEnd = exposure.map((item) => item.exposure_end).filter(Boolean).sort().at(-1) ?? null;
                     return (
                       <div key={key} className="group relative flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
                         <span className="font-semibold text-slate-900">{label}</span>
@@ -841,7 +1049,7 @@ export default function PassportEditor() {
                         <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden min-w-56 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-lg group-hover:block">
                           <div className="font-semibold text-slate-900">{[manufacturerName, label].filter(Boolean).join(" ")}</div>
                           {exposure.length ? <div className="mt-1">Experience records: {exposure.length}</div> : null}
-                          {latest ? <div>Last recorded work: {formatDate(latest)}</div> : null}
+                          {hasCurrentExposure ? <div>Current aircraft exposure</div> : latestEnd ? <div>Latest exposure ended: {formatDate(latestEnd)}</div> : null}
                           {rated ? <div className="mt-1 text-amber-700">Verified type rating</div> : null}
                           {authorised ? <div className="text-emerald-700">Current company authorisation</div> : null}
                         </div>
@@ -911,16 +1119,19 @@ export default function PassportEditor() {
 
           {profile ? (
             <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Work Rights</h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Add every country where you can work. The matching engine will treat each country separately even when you use a regional shortcut.</p>
-                </div>
-                <button type="button" disabled={busy} onClick={addEuWorkRights} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Add EU-27 unrestricted</button>
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Work Rights</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Add every country where you can work. Select “European Union — all EU member states” from the country list to add all EU work rights at once.</p>
               </div>
 
               <form onSubmit={addWorkRight} className="mt-6 grid gap-4 lg:grid-cols-4">
-                <Field label="Country"><CountrySelect value={workRightForm.country_code} onChange={(value) => setWorkRightForm({ ...workRightForm, country_code: value })} excludeCodes={workRights.map((item) => item.country_code)} /></Field>
+                <Field label="Country"><CountrySelect value={workRightForm.country_code} onChange={(value) => {
+                  if (value === "__EU27__") {
+                    void addEuWorkRights();
+                    return;
+                  }
+                  setWorkRightForm({ ...workRightForm, country_code: value });
+                }} excludeCodes={workRights.map((item) => item.country_code)} includeEu27 /></Field>
                 <Field label="Status"><select className="input" value={workRightForm.status} onChange={(e) => setWorkRightForm({ ...workRightForm, status: e.target.value as WorkRight["status"] })}><option value="citizen">Citizen</option><option value="permanent_resident">Permanent resident</option><option value="unrestricted">Unrestricted work rights</option><option value="temporary">Temporary work rights</option><option value="sponsorship_required">Sponsorship required</option></select></Field>
                 <Field label="Visa / right type"><input className="input" value={workRightForm.visa_type} onChange={(e) => setWorkRightForm({ ...workRightForm, visa_type: e.target.value })} /></Field>
                 <Field label="Expiry (if applicable)"><input type="date" className="input" value={workRightForm.expires_on} onChange={(e) => setWorkRightForm({ ...workRightForm, expires_on: e.target.value })} /></Field>
@@ -967,7 +1178,7 @@ export default function PassportEditor() {
                   setLicenceForm({ ...licenceForm, authority_id: e.target.value, issuing_country_code: authority?.country_code ?? licenceForm.issuing_country_code, custom_authority_name: "" });
                 }} required>
                   <option value="">Select authority</option>
-                  {authorities.filter((authority) => !licenceForm.issuing_country_code || authority.country_code === licenceForm.issuing_country_code).map((authority) => <option key={authority.id} value={authority.id}>{authority.country_code ? `${authority.country_code} - ` : ""}{authority.name}{authority.code ? ` (${authority.code})` : ""}</option>)}
+                  {authorities.filter((authority) => !licenceForm.issuing_country_code || authority.country_code === licenceForm.issuing_country_code).map((authority) => <option key={authority.id} value={authority.id}>{authority.name}{authority.code ? ` (${authority.code})` : ""}</option>)}
                   <option value="__custom__">Not listed — enter authority manually</option>
                 </select>
               </Field>
@@ -978,7 +1189,10 @@ export default function PassportEditor() {
               <Field label="Limitations"><textarea className="input min-h-20" value={licenceForm.limitations} onChange={(e) => setLicenceForm({ ...licenceForm, limitations: e.target.value })} /></Field>
               <Field label="Proof document" hint="PDF/JPG/PNG/WebP · private credential vault · up to 50 MB"><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="file-input" onChange={(e) => setLicenceForm({ ...licenceForm, evidence: e.target.files?.[0] ?? null })} /></Field>
             </div>
-            <button disabled={busy} className="mt-6 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">Submit licence</button>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button disabled={busy} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{editingLicenceId ? "Save licence changes" : "Submit licence"}</button>
+              {editingLicenceId ? <button type="button" disabled={busy} onClick={resetLicenceForm} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50">Cancel edit</button> : null}
+            </div>
           </form>
 
           <form onSubmit={addRating} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
@@ -991,7 +1205,11 @@ export default function PassportEditor() {
               <Field label="Mapped aircraft family">
                 <select className="input" value={ratingForm.aircraft_family_id} onChange={(e) => setRatingForm({ ...ratingForm, aircraft_family_id: e.target.value, custom_aircraft_family: "", aircraft_variant_id: "", engine_id: "" })}>
                   <option value="">No aircraft mapping</option>
-                  {families.map((family) => <option key={family.id} value={family.id}>{manufacturerById[family.manufacturer_id]?.name} — {family.display_name}</option>)}
+                  {aircraftFamilyGroups.map((group) => (
+                    <optgroup key={group.manufacturerName} label={group.manufacturerName}>
+                      {group.families.map((family) => <option key={family.id} value={family.id}>{family.display_name}</option>)}
+                    </optgroup>
+                  ))}
                   <option value="__custom__">Not listed — enter aircraft family/type</option>
                 </select>
               </Field>
@@ -1000,7 +1218,10 @@ export default function PassportEditor() {
               {ratingForm.aircraft_family_id !== "__custom__" ? <Field label="Engine (optional)"><select className="input" value={ratingForm.engine_id} onChange={(e) => setRatingForm({ ...ratingForm, engine_id: e.target.value })}><option value="">Not specified</option>{engines.map((engine) => <option key={engine.id} value={engine.id}>{engine.display_name}</option>)}</select></Field> : null}
               <Field label="Proof document" hint="PDF/JPG/PNG/WebP · up to 50 MB"><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="file-input" onChange={(e) => setRatingForm({ ...ratingForm, evidence: e.target.files?.[0] ?? null })} /></Field>
             </div>
-            <button disabled={busy || !licences.length} className="mt-6 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Submit rating</button>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button disabled={busy || !licences.length} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">{editingRatingId ? "Save rating changes" : "Submit rating"}</button>
+              {editingRatingId ? <button type="button" disabled={busy} onClick={resetRatingForm} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50">Cancel edit</button> : null}
+            </div>
           </form>
 
           <section className="xl:col-span-2 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
@@ -1008,7 +1229,43 @@ export default function PassportEditor() {
             {licences.length ? <div className="mt-5 grid gap-4 lg:grid-cols-2">{licences.map((licence) => {
               const linkedRatings = ratings.filter((rating) => rating.licence_id === licence.id);
               const authorityName = licence.issuing_authority_name || (licence.authority_id ? authorityById[licence.authority_id]?.name : null) || "Issuing authority";
-              return <div key={licence.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex items-start justify-between gap-4"><div><div className="font-semibold text-slate-950">{authorityName}</div>{licence.issuing_country_code ? <div className="mt-1 text-xs text-slate-500">{countryLabel(licence.issuing_country_code)}</div> : null}<div className="mt-1 text-sm text-slate-600">{licence.licence_scheme} · {licence.category_privileges || "No category entered"}</div></div><EvidenceStatus status={licence.verification_status} /></div>{linkedRatings.length ? <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">{linkedRatings.map((rating) => <div key={rating.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2"><div className="text-sm"><span className="font-semibold text-slate-900">{rating.official_designation}</span>{rating.aircraft_family_id ? <span className="text-slate-500"> · {familyById[rating.aircraft_family_id]?.display_name}</span> : rating.custom_aircraft_family ? <span className="text-slate-500"> · {rating.custom_aircraft_family}</span> : null}</div><EvidenceStatus status={rating.verification_status} /></div>)}</div> : null}</div>;
+              return (
+                <div key={licence.id} className="rounded-2xl border border-slate-200 p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="font-semibold text-slate-950">{authorityName}</div>
+                      {licence.issuing_country_code ? <div className="mt-1 text-xs text-slate-500">{countryLabel(licence.issuing_country_code)}</div> : null}
+                      <div className="mt-1 text-sm text-slate-600">{licence.licence_scheme} · {licence.category_privileges || "No category entered"}</div>
+                    </div>
+                    <EvidenceStatus status={licence.verification_status} />
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button type="button" disabled={busy} onClick={() => editLicence(licence)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Edit licence</button>
+                    <button type="button" disabled={busy} onClick={() => void removeLicence(licence)} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">Remove licence</button>
+                  </div>
+
+                  {linkedRatings.length ? (
+                    <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+                      {linkedRatings.map((rating) => (
+                        <div key={rating.id} className="rounded-xl bg-slate-50 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="text-sm">
+                              <span className="font-semibold text-slate-900">{rating.official_designation}</span>
+                              {rating.aircraft_family_id ? <span className="text-slate-500"> · {familyById[rating.aircraft_family_id]?.display_name}</span> : rating.custom_aircraft_family ? <span className="text-slate-500"> · {rating.custom_aircraft_family}</span> : null}
+                            </div>
+                            <EvidenceStatus status={rating.verification_status} />
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button type="button" disabled={busy} onClick={() => editRating(rating)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">Edit rating</button>
+                            <button type="button" disabled={busy} onClick={() => void removeRating(rating)} className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">Remove rating</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
             })}</div> : <p className="mt-3 text-sm text-slate-500">No licences submitted yet.</p>}
           </section>
         </div>
@@ -1019,7 +1276,7 @@ export default function PassportEditor() {
           <div className="grid gap-6 xl:grid-cols-2">
             <form onSubmit={addEmployment} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Add Employment</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Aircraft experience is anchored to the place and period where it was actually gained.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Aircraft experience is anchored to the employer and period where it was actually gained.</p>
               <div className="mt-6 space-y-4">
                 <Field label="Employer"><input className="input" value={employmentForm.employer_name} onChange={(e) => setEmploymentForm({ ...employmentForm, employer_name: e.target.value })} required /></Field>
                 <Field label="Job title"><input className="input" value={employmentForm.job_title} onChange={(e) => setEmploymentForm({ ...employmentForm, job_title: e.target.value })} required /></Field>
@@ -1028,8 +1285,7 @@ export default function PassportEditor() {
                 <Field label="Employment type"><select className="input" value={employmentForm.employment_type} onChange={(e) => setEmploymentForm({ ...employmentForm, employment_type: e.target.value })}><option value="permanent">Permanent</option><option value="fixed_term">Fixed term</option><option value="contractor">Contractor</option><option value="casual">Casual</option><option value="part_time">Part-time</option><option value="self_employed">Self-employed</option><option value="agency">Agency</option></select></Field>
                 <div className="grid gap-4 sm:grid-cols-2"><Field label="Start date"><input type="date" className="input" value={employmentForm.start_date} onChange={(e) => setEmploymentForm({ ...employmentForm, start_date: e.target.value })} required /></Field><Field label="End date"><input type="date" disabled={employmentForm.is_current} className="input disabled:bg-slate-100" value={employmentForm.end_date} onChange={(e) => setEmploymentForm({ ...employmentForm, end_date: e.target.value })} /></Field></div>
                 <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={employmentForm.is_current} onChange={(e) => setEmploymentForm({ ...employmentForm, is_current: e.target.checked, end_date: e.target.checked ? "" : employmentForm.end_date })} />Current role</label>
-                <Field label="Environment" hint="Select every environment that genuinely applies"><div className="grid gap-2 sm:grid-cols-2">{environments.map((environment) => <label key={environment.id} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm ${employmentForm.environment_ids.includes(environment.id) ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 text-slate-700"}`}><input className="sr-only" type="checkbox" checked={employmentForm.environment_ids.includes(environment.id)} onChange={() => toggleEnvironment(environment.id)} />{environment.label}</label>)}</div></Field>
-                <Field label="Short description"><textarea className="input min-h-24" value={employmentForm.description} onChange={(e) => setEmploymentForm({ ...employmentForm, description: e.target.value })} /></Field>
+                <Field label="Environment" hint="Select every environment that genuinely applies"><div className="grid gap-2 sm:grid-cols-2">{sortedEnvironments.map((environment) => <label key={environment.id} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm ${employmentForm.environment_ids.includes(environment.id) ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 text-slate-700"}`}><input className="sr-only" type="checkbox" checked={employmentForm.environment_ids.includes(environment.id)} onChange={() => toggleEnvironment(environment.id)} />{environment.label}</label>)}</div></Field>
               </div>
               <button disabled={busy} className="mt-6 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">Add employment</button>
             </form>
@@ -1039,14 +1295,17 @@ export default function PassportEditor() {
               <p className="mt-2 text-sm leading-6 text-slate-600">This is the source of the blue dot. Recency and exposure level stay visible behind it.</p>
               <div className="mt-6 space-y-4">
                 <Field label="Employment"><select className="input" value={exposureForm.employment_id} onChange={(e) => setExposureForm({ ...exposureForm, employment_id: e.target.value })} required><option value="">Select employment</option>{employments.map((employment) => <option key={employment.id} value={employment.id}>{employment.employer_name} · {employment.job_title}</option>)}</select></Field>
-                <Field label="Aircraft family"><select className="input" value={exposureForm.aircraft_family_id} onChange={(e) => setExposureForm({ ...exposureForm, aircraft_family_id: e.target.value, custom_aircraft_family: "", aircraft_variant_id: "", engine_id: "" })} required><option value="">Select family</option>{families.map((family) => <option key={family.id} value={family.id}>{manufacturerById[family.manufacturer_id]?.name} — {family.display_name}</option>)}<option value="__custom__">Not listed — enter aircraft family/type</option></select></Field>
+                <Field label="Aircraft family"><select className="input" value={exposureForm.aircraft_family_id} onChange={(e) => setExposureForm({ ...exposureForm, aircraft_family_id: e.target.value, custom_aircraft_family: "", aircraft_variant_id: "", engine_id: "" })} required><option value="">Select family</option>{aircraftFamilyGroups.map((group) => <optgroup key={group.manufacturerName} label={group.manufacturerName}>{group.families.map((family) => <option key={family.id} value={family.id}>{family.display_name}</option>)}</optgroup>)}<option value="__custom__">Not listed — enter aircraft family/type</option></select></Field>
                 {exposureForm.aircraft_family_id === "__custom__" ? <Field label="Aircraft family / type"><input className="input" value={exposureForm.custom_aircraft_family} onChange={(e) => setExposureForm({ ...exposureForm, custom_aircraft_family: e.target.value })} placeholder="e.g. NH90, Eurofighter Typhoon" required /></Field> : null}
                 {exposureForm.aircraft_family_id !== "__custom__" ? <Field label="Variant"><select className="input" value={exposureForm.aircraft_variant_id} onChange={(e) => setExposureForm({ ...exposureForm, aircraft_variant_id: e.target.value, engine_id: "" })}><option value="">Family-level experience</option>{filteredExposureVariants.map((variant) => <option key={variant.id} value={variant.id}>{variant.display_name}</option>)}</select></Field> : null}
                 {exposureForm.aircraft_family_id !== "__custom__" ? <Field label="Engine"><select className="input" value={exposureForm.engine_id} onChange={(e) => setExposureForm({ ...exposureForm, engine_id: e.target.value })}><option value="">Not specified</option>{filteredExposureEngines.map((engine) => <option key={engine.id} value={engine.id}>{engine.display_name}</option>)}</select></Field> : null}
                 <Field label="Discipline"><input className="input" value={exposureForm.discipline} onChange={(e) => setExposureForm({ ...exposureForm, discipline: e.target.value })} /></Field>
                 <Field label="Exposure level"><select className="input" value={exposureForm.exposure} onChange={(e) => setExposureForm({ ...exposureForm, exposure: e.target.value as Exposure["exposure"] })}><option value="primary">Primary</option><option value="regular">Regular</option><option value="occasional">Occasional</option><option value="limited">Limited</option></select></Field>
-                <div className="grid gap-4 sm:grid-cols-2"><Field label="Exposure start"><input type="date" className="input" value={exposureForm.exposure_start} onChange={(e) => setExposureForm({ ...exposureForm, exposure_start: e.target.value })} /></Field><Field label="Exposure end"><input type="date" className="input" value={exposureForm.exposure_end} onChange={(e) => setExposureForm({ ...exposureForm, exposure_end: e.target.value })} /></Field></div>
-                <Field label="Last worked on"><input type="date" className="input" value={exposureForm.last_worked_on} onChange={(e) => setExposureForm({ ...exposureForm, last_worked_on: e.target.value })} /></Field>
+                <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={exposureForm.is_current} onChange={(e) => setExposureForm({ ...exposureForm, is_current: e.target.checked, exposure_end: e.target.checked ? "" : exposureForm.exposure_end })} />Current exposure</label>
+                <div className={`grid gap-4 ${exposureForm.is_current ? "" : "sm:grid-cols-2"}`}>
+                  <Field label="Exposure start"><input type="date" className="input" value={exposureForm.exposure_start} onChange={(e) => setExposureForm({ ...exposureForm, exposure_start: e.target.value })} required /></Field>
+                  {!exposureForm.is_current ? <Field label="Exposure end"><input type="date" className="input" value={exposureForm.exposure_end} onChange={(e) => setExposureForm({ ...exposureForm, exposure_end: e.target.value })} required /></Field> : null}
+                </div>
               </div>
               <button disabled={busy || !employments.length} className="mt-6 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Add aircraft experience</button>
             </form>
@@ -1057,7 +1316,7 @@ export default function PassportEditor() {
             {employments.length ? <div className="mt-5 space-y-5">{employments.map((employment) => {
               const envLabels = employmentEnvironments.filter((item) => item.employment_id === employment.id).map((item) => environmentById[item.environment_id]?.label).filter(Boolean);
               const employmentExposure = exposures.filter((item) => item.employment_id === employment.id);
-              return <div key={employment.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="font-semibold text-slate-950">{employment.employer_name}</div><div className="mt-1 text-sm text-slate-600">{employment.job_title}{employment.discipline ? ` · ${employment.discipline}` : ""}</div><div className="mt-1 text-xs text-slate-500">{formatDate(employment.start_date)} — {employment.is_current ? "Present" : formatDate(employment.end_date)}</div></div><span className={`self-start rounded-full px-2.5 py-1 text-xs font-semibold ${employment.employer_confirmed ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{employment.employer_confirmed ? "Employer confirmed" : "Worker record"}</span></div>{envLabels.length ? <div className="mt-3 flex flex-wrap gap-2">{envLabels.map((label) => <span key={label} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{label}</span>)}</div> : null}{employmentExposure.length ? <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{employmentExposure.map((exposure) => <div key={exposure.id} className="rounded-xl bg-slate-50 px-3 py-3"><div className="flex items-center gap-2 font-semibold text-slate-900"><BlueDot />{exposure.aircraft_family_id ? familyById[exposure.aircraft_family_id]?.display_name : exposure.custom_aircraft_family || "Aircraft"}{exposure.aircraft_variant_id ? ` · ${variantById[exposure.aircraft_variant_id]?.display_name}` : ""}</div><div className="mt-1 text-xs text-slate-500">{formatStatus(exposure.exposure)} exposure{exposure.last_worked_on ? ` · last ${formatDate(exposure.last_worked_on)}` : ""}</div>{exposure.engine_id ? <div className="mt-1 text-xs text-slate-500">{engineById[exposure.engine_id]?.display_name}</div> : null}</div>)}</div> : null}</div>;
+              return <div key={employment.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="font-semibold text-slate-950">{employment.employer_name}</div><div className="mt-1 text-sm text-slate-600">{employment.job_title}{employment.discipline ? ` · ${employment.discipline}` : ""}</div><div className="mt-1 text-xs text-slate-500">{formatDate(employment.start_date)} — {employment.is_current ? "Present" : formatDate(employment.end_date)}</div></div><span className={`self-start rounded-full px-2.5 py-1 text-xs font-semibold ${employment.employer_confirmed ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{employment.employer_confirmed ? "Employer confirmed" : "Worker record"}</span></div>{envLabels.length ? <div className="mt-3 flex flex-wrap gap-2">{envLabels.map((label) => <span key={label} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{label}</span>)}</div> : null}{employmentExposure.length ? <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{employmentExposure.map((exposure) => <div key={exposure.id} className="rounded-xl bg-slate-50 px-3 py-3"><div className="flex items-center gap-2 font-semibold text-slate-900"><BlueDot />{exposure.aircraft_family_id ? familyById[exposure.aircraft_family_id]?.display_name : exposure.custom_aircraft_family || "Aircraft"}{exposure.aircraft_variant_id ? ` · ${variantById[exposure.aircraft_variant_id]?.display_name}` : ""}</div><div className="mt-1 text-xs text-slate-500">{formatStatus(exposure.exposure)} exposure · {exposure.exposure_start ? formatDate(exposure.exposure_start) : "Start not recorded"} — {exposure.exposure_end ? formatDate(exposure.exposure_end) : "Present"}</div>{exposure.engine_id ? <div className="mt-1 text-xs text-slate-500">{engineById[exposure.engine_id]?.display_name}</div> : null}</div>)}</div> : null}</div>;
             })}</div> : <p className="mt-3 text-sm text-slate-500">No employment records yet.</p>}
           </section>
         </div>
@@ -1070,17 +1329,20 @@ function CountrySelect({
   value,
   onChange,
   excludeCodes = [],
+  includeEu27 = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   excludeCodes?: string[];
+  includeEu27?: boolean;
 }) {
   const excluded = new Set(excludeCodes.filter((code) => code !== value));
   return (
     <select className="input" value={value} onChange={(event) => onChange(event.target.value)}>
       <option value="">Select country</option>
+      {includeEu27 ? <option value="__EU27__">European Union — all EU member states</option> : null}
       {COUNTRIES.filter((country) => !excluded.has(country.code)).map((country) => (
-        <option key={country.code} value={country.code}>{country.code} - {country.name}</option>
+        <option key={country.code} value={country.code}>{country.name}</option>
       ))}
     </select>
   );

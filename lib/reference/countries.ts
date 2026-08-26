@@ -1004,5 +1004,5 @@ export const EU_COUNTRY_CODES = ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE",
 export function countryLabel(code: string | null | undefined) {
   if (!code) return "";
   const country = COUNTRIES.find((item) => item.code === code);
-  return country ? `${country.code} - ${country.name}` : code;
+  return country ? country.name : code;
 }
