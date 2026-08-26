@@ -111,20 +111,38 @@ type Tab = "preview" | "identity" | "licences" | "employment";
 
 type Notice = { type: "success" | "error"; text: string } | null;
 
-const emptyProfile = {
+type IdentityForm = {
+  first_name: string;
+  last_name: string;
+  professional_headline: string;
+  current_city: string;
+  current_country_code: string;
+  preferred_currency: string;
+  visibility: Profile["visibility"];
+  market_status: Profile["market_status"];
+  bio: string;
+  primary_nationality: string;
+  nationality_visibility: Nationality["visibility"];
+  work_right_country: string;
+  work_right_status: WorkRight["status"];
+  visa_type: string;
+  work_right_expires_on: string;
+};
+
+const emptyProfile: IdentityForm = {
   first_name: "",
   last_name: "",
   professional_headline: "",
   current_city: "",
   current_country_code: "",
   preferred_currency: "AUD",
-  visibility: "aviation_network" as const,
-  market_status: "not_open" as const,
+  visibility: "aviation_network",
+  market_status: "not_open",
   bio: "",
   primary_nationality: "",
-  nationality_visibility: "visible" as const,
+  nationality_visibility: "visible",
   work_right_country: "",
-  work_right_status: "unrestricted" as WorkRight["status"],
+  work_right_status: "unrestricted",
   visa_type: "",
   work_right_expires_on: "",
 };
@@ -205,7 +223,7 @@ export default function PassportEditor() {
   const [engines, setEngines] = useState<Engine[]>([]);
   const [variantEngines, setVariantEngines] = useState<VariantEngine[]>([]);
 
-  const [identityForm, setIdentityForm] = useState(emptyProfile);
+  const [identityForm, setIdentityForm] = useState<IdentityForm>(emptyProfile);
   const [licenceForm, setLicenceForm] = useState({
     authority_id: "",
     licence_scheme: "",
