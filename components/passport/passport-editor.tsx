@@ -860,7 +860,7 @@ export default function PassportEditor() {
                     <div key={licence.id} className="rounded-2xl border border-slate-200 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <div className="font-semibold text-slate-900">{authorityById[licence.authority_id]?.name ?? "Aviation authority"}</div>
+                          <div className="font-semibold text-slate-900">{licence.issuing_authority_name || (licence.authority_id ? authorityById[licence.authority_id]?.name : null) || "Aviation authority"}</div>
                           <div className="mt-1 text-sm text-slate-600">{licence.licence_scheme}{licence.category_privileges ? ` · ${licence.category_privileges}` : ""}</div>
                         </div>
                         <EvidenceStatus status={licence.verification_status} />
