@@ -5,7 +5,7 @@ export default function Home() {
     <main className="min-h-screen">
       <section className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 py-20">
         <div className="mb-6 inline-flex w-fit rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600">
-          Aviation Passport · V0.1
+          Aviation Passport · V0.7
         </div>
 
         <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-slate-950 sm:text-7xl">
@@ -31,6 +31,12 @@ export default function Home() {
             className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-medium text-slate-900"
           >
             My Passport
+          </Link>
+          <Link
+            href="/employer"
+            className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-medium text-slate-900"
+          >
+            Employer Portal
           </Link>
         </div>
 

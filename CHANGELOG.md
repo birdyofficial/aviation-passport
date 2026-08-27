@@ -1,5 +1,25 @@
 # Changelog
 
+## V0.7 — Employer Foundation + Open Demand
+- Added protected Employer Portal at `/employer`
+- Organisation creation with automatic creator membership bootstrap
+- Organisation selector and verification status
+- Open Demand dashboard with active-demand, position and draft metrics
+- Create and edit structured demand
+- Demand status: Draft, Open, Paused, Filled, Cancelled
+- Public, Limited and Confidential demand visibility
+- Role, discipline, seniority, quantity, employment type and location
+- Sponsorship and relocation assistance
+- Structured operating environments
+- Roster shift and pattern
+- Expected start and target fill dates
+- Transparent base compensation range in native currency
+- Open Demand cannot be published without compensation and country
+- Demand register with quick Open / Pause / Cancel controls
+- No worker/talent database access exposed yet; employer access remains demand-first
+- Added Employer Portal navigation from home and My Passport
+- No Supabase migration required: V0.7 uses the employer/demand schema and RLS already created in V0.1
+
 ## V0.6.1 — Market Preference UX
 - Notice period now supports days, weeks or months
 - Original notice value/unit is preserved for display and editing

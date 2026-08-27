@@ -1668,7 +1668,10 @@ export default function PassportEditor() {
           <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">My Passport</h1>
           <p className="mt-2 max-w-2xl text-slate-600">One structured aviation identity. Build it once; let the career record become increasingly self-maintaining.</p>
         </div>
-        <button onClick={signOut} className="self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Sign out</button>
+        <div className="flex flex-wrap gap-2 self-start">
+          <a href="/employer" className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Employer Portal</a>
+          <button onClick={signOut} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Sign out</button>
+        </div>
       </div>
 
       <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200 pb-px">
