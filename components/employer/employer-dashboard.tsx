@@ -60,6 +60,7 @@ type Demand = {
     shift?: string;
     pattern?: string;
   } | null;
+  deleted_at: string | null;
   created_at: string;
 };
 
@@ -329,6 +330,7 @@ export default function EmployerDashboard() {
         .from("open_demands")
         .select("*")
         .eq("organisation_id", organisationId)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (demandResult.error) throw demandResult.error;
 
@@ -609,6 +611,27 @@ export default function EmployerDashboard() {
     }
   }
 
+  async function deleteCancelledDemand(demand: Demand) {
+    if (demand.status !== "cancelled") return;
+    if (!window.confirm("Delete this cancelled demand from the register? It will disappear from the employer workspace, while anonymised historical market data is retained.")) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await supabase
+        .from("open_demands")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", demand.id)
+        .eq("status", "cancelled");
+      if (error) throw error;
+      setNotice({ type: "success", text: "Cancelled demand removed from the register." });
+      await loadDemandData(selectedOrganisationId);
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not delete cancelled demand." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -626,7 +649,7 @@ export default function EmployerDashboard() {
           <div className="text-xs font-bold tracking-[0.22em] text-slate-500">AVIATION PASSPORT · EMPLOYER</div>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">Open Demand</h1>
           <p className="mt-2 max-w-3xl text-slate-600">
-            Declare real aviation labour demand first. Talent access comes later and only in the context of active demand.
+            Declare real aviation labour demand first. Individual talent access exists only in the context of active Open Demand.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -828,7 +851,7 @@ export default function EmployerDashboard() {
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Demand register</div>
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{selectedOrganisation.name}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">This is the organisation’s declared labour demand. No worker database access is exposed here.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">This is the organisation’s declared labour demand. Open demands can unlock demand-specific market intelligence and matched talent.</p>
               </div>
 
               {demands.length ? (
@@ -867,7 +890,7 @@ export default function EmployerDashboard() {
 
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button type="button" disabled={busy} onClick={() => editDemand(demand)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Edit</button>
-                          <button type="button" disabled={busy} onClick={() => setRequirementsDemandId(demand.id)} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Requirements & market</button>
+                          <a href={`/employer/demand/${demand.id}`} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Requirements & market</a>
                           {demand.status !== "open" && demand.status !== "filled" && demand.status !== "cancelled" ? (
                             <button type="button" disabled={busy} onClick={() => void changeDemandStatus(demand, "open")} className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Open demand</button>
                           ) : null}
@@ -876,6 +899,9 @@ export default function EmployerDashboard() {
                           ) : null}
                           {!["filled", "cancelled"].includes(demand.status) ? (
                             <button type="button" disabled={busy} onClick={() => void changeDemandStatus(demand, "cancelled")} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">Cancel</button>
+                          ) : null}
+                          {demand.status === "cancelled" ? (
+                            <button type="button" disabled={busy} onClick={() => void deleteCancelledDemand(demand)} className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100">Delete</button>
                           ) : null}
                         </div>
                       </div>
@@ -891,18 +917,6 @@ export default function EmployerDashboard() {
             </section>
           )}
 
-          {!builderActive && requirementsDemandId ? (() => {
-            const demand = demands.find((item) => item.id === requirementsDemandId);
-            return demand ? (
-              <DemandRequirements
-                demandId={demand.id}
-                demandTitle={demand.public_title}
-                countryCode={demand.country_code}
-                sponsorshipAvailable={demand.sponsorship_available}
-                onClose={() => setRequirementsDemandId(null)}
-              />
-            ) : null;
-          })() : null}
         </>
       ) : null}
     </div>

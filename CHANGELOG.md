@@ -1,5 +1,23 @@
 # Changelog
 
+## V0.9 — Demand Workspace + Talent Matches
+- Requirements & Market now opens on a dedicated demand workspace page instead of appearing below the Employer Portal register
+- Added `/employer/demand/[id]` workspace with Requirements & Market and Talent Matches tabs
+- Cancelled demands can be deleted from the employer register
+- Demand deletion is non-destructive: the record is soft-deleted so historical market intelligence is preserved
+- Added controlled individual talent matching for active Open Demand only
+- No broad employer SELECT access to worker Passport tables
+- Private, anonymous-market and not-open workers are excluded from individual talent results
+- Mandatory requirements remain hard filters
+- Trainable and Preferred requirements become explainable candidate gap signals
+- Added Exact Match, Strong Match, Trainable Match and Mobility Match labels
+- Added trust signal for fully verified mandatory facts versus structured facts still pending verification
+- Work-right, location, availability and compensation compatibility appear on each candidate
+- Private compensation minimums remain hidden; only compatibility is exposed unless the worker selected Visible
+- Explicit worker Not Interested location preferences exclude the opportunity
+- Directly comparable offers below a worker's private minimum are excluded from individual matches
+- No candidate contact flow yet; structured demand-bound opportunities are the next layer
+
 ## V0.8.1 — Guided Demand Builder UX
 - Reworked demand creation into one guided two-step flow
 - Step 1 captures role, location, mobility, roster, timing and compensation
