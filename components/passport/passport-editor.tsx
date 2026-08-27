@@ -115,6 +115,26 @@ type CurrentAuthorisation = {
   expires_on: string | null;
 };
 
+type CompanyAuthorisation = {
+  id: string;
+  worker_id: string;
+  organisation_id: string | null;
+  employment_id: string | null;
+  employer_name: string;
+  authorisation_name: string;
+  aircraft_family_id: string | null;
+  custom_aircraft_family: string | null;
+  aircraft_variant_id: string | null;
+  competency_id: string | null;
+  issued_on: string | null;
+  expires_on: string | null;
+  ended_on: string | null;
+  revoked_on: string | null;
+  evidence_path: string | null;
+  verification_status: string;
+  verified_at: string | null;
+};
+
 type TrainingRecord = {
   id: string;
   course_name: string;
@@ -148,7 +168,7 @@ type WorkerCompetency = {
   verified_at: string | null;
 };
 
-type Tab = "preview" | "identity" | "licences" | "employment" | "training";
+type Tab = "preview" | "identity" | "licences" | "employment" | "training" | "authorisations";
 
 type Notice = { type: "success" | "error"; text: string } | null;
 
@@ -301,6 +321,7 @@ export default function PassportEditor() {
   const [employmentEnvironments, setEmploymentEnvironments] = useState<EmploymentEnvironment[]>([]);
   const [exposures, setExposures] = useState<Exposure[]>([]);
   const [authorisations, setAuthorisations] = useState<CurrentAuthorisation[]>([]);
+  const [companyAuthorisations, setCompanyAuthorisations] = useState<CompanyAuthorisation[]>([]);
   const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([]);
   const [workerCompetencies, setWorkerCompetencies] = useState<WorkerCompetency[]>([]);
 
@@ -318,6 +339,7 @@ export default function PassportEditor() {
   const [editingRatingId, setEditingRatingId] = useState<string | null>(null);
   const [editingTrainingId, setEditingTrainingId] = useState<string | null>(null);
   const [editingCompetencyId, setEditingCompetencyId] = useState<string | null>(null);
+  const [editingAuthorisationId, setEditingAuthorisationId] = useState<string | null>(null);
   const [workRightForm, setWorkRightForm] = useState({
     country_code: "",
     status: "unrestricted" as WorkRight["status"],
@@ -390,6 +412,21 @@ export default function PassportEditor() {
     evidence: null as File | null,
   });
 
+  const [authorisationForm, setAuthorisationForm] = useState({
+    employment_id: "",
+    custom_employer_name: "",
+    authorisation_name: "",
+    aircraft_family_id: "",
+    custom_aircraft_family: "",
+    aircraft_variant_id: "",
+    competency_id: "",
+    issued_on: "",
+    expires_on: "",
+    is_current: true,
+    ended_on: "",
+    evidence: null as File | null,
+  });
+
   async function loadData() {
     setLoading(true);
     setNotice(null);
@@ -420,6 +457,7 @@ export default function PassportEditor() {
       employmentEnvironmentsResult,
       exposureResult,
       authorisationsResult,
+      companyAuthorisationsResult,
       trainingResult,
       competencyCatalogResult,
       workerCompetenciesResult,
@@ -440,6 +478,7 @@ export default function PassportEditor() {
       supabase.from("employment_environments").select("*"),
       supabase.from("employment_aircraft_exposure").select("*").order("created_at", { ascending: false }),
       supabase.from("worker_current_authorisations").select("*"),
+      supabase.from("company_authorisations").select("*").order("created_at", { ascending: false }),
       supabase.from("training_records").select("*").order("created_at", { ascending: false }),
       supabase.from("competency_catalog").select("*").order("label"),
       supabase.from("worker_competencies").select("*").order("created_at", { ascending: false }),
@@ -462,6 +501,7 @@ export default function PassportEditor() {
       employmentEnvironmentsResult,
       exposureResult,
       authorisationsResult,
+      companyAuthorisationsResult,
       trainingResult,
       competencyCatalogResult,
       workerCompetenciesResult,
@@ -493,6 +533,7 @@ export default function PassportEditor() {
     setEmploymentEnvironments((employmentEnvironmentsResult.data ?? []) as EmploymentEnvironment[]);
     setExposures((exposureResult.data ?? []) as Exposure[]);
     setAuthorisations((authorisationsResult.data ?? []) as CurrentAuthorisation[]);
+    setCompanyAuthorisations((companyAuthorisationsResult.data ?? []) as CompanyAuthorisation[]);
     setTrainingRecords((trainingResult.data ?? []) as TrainingRecord[]);
     setCompetencyCatalog((competencyCatalogResult.data ?? []) as CompetencyCatalogItem[]);
     setWorkerCompetencies((workerCompetenciesResult.data ?? []) as WorkerCompetency[]);
@@ -1087,6 +1128,115 @@ export default function PassportEditor() {
     }
   }
 
+  function resetAuthorisationForm() {
+    setEditingAuthorisationId(null);
+    setAuthorisationForm({
+      employment_id: "",
+      custom_employer_name: "",
+      authorisation_name: "",
+      aircraft_family_id: "",
+      custom_aircraft_family: "",
+      aircraft_variant_id: "",
+      competency_id: "",
+      issued_on: "",
+      expires_on: "",
+      is_current: true,
+      ended_on: "",
+      evidence: null,
+    });
+  }
+
+  function editAuthorisation(record: CompanyAuthorisation) {
+    setEditingAuthorisationId(record.id);
+    setAuthorisationForm({
+      employment_id: record.employment_id ?? (employments.some((item) => item.employer_name === record.employer_name) ? employments.find((item) => item.employer_name === record.employer_name)?.id ?? "" : "__custom__"),
+      custom_employer_name: record.employment_id ? "" : record.employer_name,
+      authorisation_name: record.authorisation_name,
+      aircraft_family_id: record.aircraft_family_id ?? (record.custom_aircraft_family ? "__custom__" : ""),
+      custom_aircraft_family: record.custom_aircraft_family ?? "",
+      aircraft_variant_id: record.aircraft_variant_id ?? "",
+      competency_id: record.competency_id ?? "",
+      issued_on: record.issued_on ?? "",
+      expires_on: record.expires_on ?? "",
+      is_current: !record.ended_on && !record.revoked_on,
+      ended_on: record.ended_on ?? record.revoked_on ?? "",
+      evidence: null,
+    });
+    setNotice(record.verification_status === "verified"
+      ? { type: "success", text: "Editing this verified authorisation will remove the green shield until the updated record is reviewed again." }
+      : null);
+  }
+
+  async function saveAuthorisation(event: FormEvent) {
+    event.preventDefault();
+    if (!profile || !userId) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const existing = editingAuthorisationId ? companyAuthorisations.find((item) => item.id === editingAuthorisationId) : null;
+      const linkedEmployment = authorisationForm.employment_id && authorisationForm.employment_id !== "__custom__"
+        ? employments.find((item) => item.id === authorisationForm.employment_id)
+        : null;
+      const employerName = linkedEmployment?.employer_name ?? authorisationForm.custom_employer_name.trim();
+      if (!employerName) throw new Error("Select an employment record or enter the employer name.");
+      if (!authorisationForm.authorisation_name.trim()) throw new Error("Enter the authorisation name.");
+      if (!authorisationForm.is_current && !authorisationForm.ended_on) throw new Error("Enter when the historical authorisation ended.");
+
+      const uploadedEvidence = authorisationForm.evidence ? await uploadEvidence(authorisationForm.evidence, "authorisations") : null;
+      const evidencePath = uploadedEvidence ?? existing?.evidence_path ?? null;
+      const payload = {
+        employment_id: linkedEmployment?.id ?? null,
+        employer_name: employerName,
+        authorisation_name: authorisationForm.authorisation_name.trim(),
+        aircraft_family_id: authorisationForm.aircraft_family_id && authorisationForm.aircraft_family_id !== "__custom__" ? authorisationForm.aircraft_family_id : null,
+        custom_aircraft_family: authorisationForm.aircraft_family_id === "__custom__" ? authorisationForm.custom_aircraft_family.trim() || null : null,
+        aircraft_variant_id: authorisationForm.aircraft_family_id === "__custom__" ? null : authorisationForm.aircraft_variant_id || null,
+        competency_id: authorisationForm.competency_id || null,
+        issued_on: authorisationForm.issued_on || null,
+        expires_on: authorisationForm.expires_on || null,
+        ended_on: authorisationForm.is_current ? null : authorisationForm.ended_on || null,
+        revoked_on: null,
+        evidence_path: evidencePath,
+      };
+
+      const result = editingAuthorisationId
+        ? await supabase.from("company_authorisations").update(payload).eq("id", editingAuthorisationId)
+        : await supabase.from("company_authorisations").insert({ worker_id: userId, ...payload });
+      if (result.error) throw result.error;
+
+      if (uploadedEvidence && existing?.evidence_path && existing.evidence_path !== uploadedEvidence) {
+        await supabase.storage.from("credential-evidence").remove([existing.evidence_path]);
+      }
+
+      const wasEditing = Boolean(editingAuthorisationId);
+      resetAuthorisationForm();
+      setNotice({ type: "success", text: wasEditing ? "Authorisation updated. Verification has returned to pending." : "Authorisation submitted. The green shield appears only after verification." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save authorisation." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeAuthorisation(record: CompanyAuthorisation) {
+    if (!window.confirm("Remove this company authorisation?")) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await supabase.from("company_authorisations").delete().eq("id", record.id);
+      if (error) throw error;
+      if (record.evidence_path) await supabase.storage.from("credential-evidence").remove([record.evidence_path]);
+      if (editingAuthorisationId === record.id) resetAuthorisationForm();
+      setNotice({ type: "success", text: "Company authorisation removed." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove authorisation." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -1147,6 +1297,7 @@ export default function PassportEditor() {
   const filteredRatingVariants = ratingForm.aircraft_family_id === "__custom__" ? [] : variants.filter((item) => item.family_id === ratingForm.aircraft_family_id);
   const filteredExposureVariants = exposureForm.aircraft_family_id === "__custom__" ? [] : variants.filter((item) => item.family_id === exposureForm.aircraft_family_id);
   const filteredCompetencyVariants = competencyForm.aircraft_family_id ? variants.filter((item) => item.family_id === competencyForm.aircraft_family_id) : [];
+  const filteredAuthorisationVariants = authorisationForm.aircraft_family_id && authorisationForm.aircraft_family_id !== "__custom__" ? variants.filter((item) => item.family_id === authorisationForm.aircraft_family_id) : [];
   const allowedExposureEngineIds = exposureForm.aircraft_variant_id
     ? new Set(variantEngines.filter((item) => item.variant_id === exposureForm.aircraft_variant_id).map((item) => item.engine_id))
     : null;
@@ -1216,6 +1367,11 @@ export default function PassportEditor() {
   }
 
   const primaryNationality = nationalities.find((item) => item.is_primary) ?? nationalities[0];
+  const euWorkRightCodes = new Set(workRights.map((item) => item.country_code).filter((code) => EU_COUNTRY_CODES.includes(code as (typeof EU_COUNTRY_CODES)[number])));
+  const hasFullEuWorkRights = EU_COUNTRY_CODES.every((code) => euWorkRightCodes.has(code));
+  const previewWorkRights = hasFullEuWorkRights
+    ? workRights.filter((item) => !EU_COUNTRY_CODES.includes(item.country_code as (typeof EU_COUNTRY_CODES)[number]))
+    : workRights;
 
   return (
     <div>
@@ -1235,6 +1391,7 @@ export default function PassportEditor() {
           ["licences", "Licences & Ratings"],
           ["employment", "Employment & Aircraft"],
           ["training", "Training & Competencies"],
+          ["authorisations", "Company Authorisations"],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -1364,12 +1521,38 @@ export default function PassportEditor() {
                 </div>
               ) : <p className="mt-4 text-sm text-slate-500">No training or competencies added yet.</p>}
             </div>
+
+            <div className="mt-8 border-t border-slate-100 pt-6">
+              <h3 className="text-lg font-semibold text-slate-950">Company Authorisations</h3>
+              {companyAuthorisations.length ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {companyAuthorisations.map((record) => {
+                    const familyName = record.aircraft_family_id ? familyById[record.aircraft_family_id]?.display_name : record.custom_aircraft_family;
+                    const current = !record.ended_on && !record.revoked_on && (!record.expires_on || !isExpired(record.expires_on));
+                    return (
+                      <div key={record.id} className="rounded-2xl border border-slate-200 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-slate-900">{record.authorisation_name}</div>
+                            <div className="mt-1 text-sm text-slate-600">{record.employer_name}{familyName ? ` · ${familyName}` : ""}</div>
+                          </div>
+                          {record.verification_status === "verified" && current ? <GreenShield /> : <EvidenceStatus status={record.verification_status} />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <p className="mt-4 text-sm text-slate-500">No company authorisations added yet.</p>}
+            </div>
           </section>
 
           <aside className="space-y-6">
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <h3 className="font-semibold text-slate-950">Work rights</h3>
-              {workRights.length ? <div className="mt-3 space-y-3">{workRights.map((right) => <div key={right.id} className="rounded-xl bg-slate-50 p-3"><div className="font-semibold text-slate-900">{countryLabel(right.country_code)}</div><div className="mt-1 text-sm text-slate-600">{formatStatus(right.status)}</div></div>)}</div> : <p className="mt-2 text-sm text-slate-500">No work rights added.</p>}
+              {workRights.length ? <div className="mt-3 space-y-3">
+                {hasFullEuWorkRights ? <div className="rounded-xl bg-slate-50 p-3"><div className="flex items-center gap-2 font-semibold text-slate-900"><span aria-hidden="true">🇪🇺</span><span>European Union</span></div><div className="mt-1 text-sm text-slate-600">Work rights across all EU member states</div></div> : null}
+                {previewWorkRights.map((right) => <div key={right.id} className="rounded-xl bg-slate-50 p-3"><div className="font-semibold text-slate-900">{countryLabel(right.country_code)}</div><div className="mt-1 text-sm text-slate-600">{formatStatus(right.status)}</div></div>)}
+              </div> : <p className="mt-2 text-sm text-slate-500">No work rights added.</p>}
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1716,6 +1899,55 @@ export default function PassportEditor() {
               })}</div> : <p className="mt-3 text-sm text-slate-500">No competencies added yet.</p>}
             </section>
           </div>
+        </div>
+      ) : null}
+
+      {tab === "authorisations" && profile ? (
+        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+          <form onSubmit={saveAuthorisation} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{editingAuthorisationId ? "Edit Company Authorisation" : "Add Company Authorisation"}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">A company authorisation is an objective privilege granted by an employer. Submit the fact and evidence; the green shield appears only after verification.</p>
+            <div className="mt-6 space-y-4">
+              <Field label="Employer / employment record">
+                <select className="input" value={authorisationForm.employment_id} onChange={(e) => setAuthorisationForm({ ...authorisationForm, employment_id: e.target.value, custom_employer_name: "" })} required>
+                  <option value="">Select employment</option>
+                  {employments.map((employment) => <option key={employment.id} value={employment.id}>{employment.employer_name} — {employment.job_title}</option>)}
+                  <option value="__custom__">Not linked — enter employer manually</option>
+                </select>
+              </Field>
+              {authorisationForm.employment_id === "__custom__" ? <Field label="Employer name"><input className="input" value={authorisationForm.custom_employer_name} onChange={(e) => setAuthorisationForm({ ...authorisationForm, custom_employer_name: e.target.value })} required /></Field> : null}
+              <Field label="Authorisation name" hint="Use the exact company wording where possible"><input className="input" value={authorisationForm.authorisation_name} onChange={(e) => setAuthorisationForm({ ...authorisationForm, authorisation_name: e.target.value })} required /></Field>
+
+              <Field label="Aircraft family (optional)">
+                <select className="input" value={authorisationForm.aircraft_family_id} onChange={(e) => setAuthorisationForm({ ...authorisationForm, aircraft_family_id: e.target.value, custom_aircraft_family: "", aircraft_variant_id: "" })}>
+                  <option value="">No aircraft specified</option>
+                  {aircraftFamilyGroups.map((group) => <optgroup key={group.manufacturerName} label={group.manufacturerName}>{group.families.map((family) => <option key={family.id} value={family.id}>{family.display_name}</option>)}</optgroup>)}
+                  <option value="__custom__">Not listed — enter aircraft family/type</option>
+                </select>
+              </Field>
+              {authorisationForm.aircraft_family_id === "__custom__" ? <Field label="Aircraft family / type"><input className="input" value={authorisationForm.custom_aircraft_family} onChange={(e) => setAuthorisationForm({ ...authorisationForm, custom_aircraft_family: e.target.value })} required /></Field> : null}
+              {authorisationForm.aircraft_family_id && authorisationForm.aircraft_family_id !== "__custom__" ? <Field label="Variant (optional)"><select className="input" value={authorisationForm.aircraft_variant_id} onChange={(e) => setAuthorisationForm({ ...authorisationForm, aircraft_variant_id: e.target.value })}><option value="">All / not specified</option>{filteredAuthorisationVariants.map((variant) => <option key={variant.id} value={variant.id}>{variant.display_name}</option>)}</select></Field> : null}
+
+              <Field label="Linked competency (optional)"><select className="input" value={authorisationForm.competency_id} onChange={(e) => setAuthorisationForm({ ...authorisationForm, competency_id: e.target.value })}><option value="">No competency specified</option>{competencyCatalog.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
+              <div className="grid gap-4 sm:grid-cols-2"><Field label="Issued"><input type="date" className="input" value={authorisationForm.issued_on} onChange={(e) => setAuthorisationForm({ ...authorisationForm, issued_on: e.target.value })} /></Field><Field label="Expiry (if applicable)"><input type="date" className="input" value={authorisationForm.expires_on} onChange={(e) => setAuthorisationForm({ ...authorisationForm, expires_on: e.target.value })} /></Field></div>
+              <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={authorisationForm.is_current} onChange={(e) => setAuthorisationForm({ ...authorisationForm, is_current: e.target.checked, ended_on: e.target.checked ? "" : authorisationForm.ended_on })} />Current authorisation</label>
+              {!authorisationForm.is_current ? <Field label="Authorisation ended"><input type="date" className="input" value={authorisationForm.ended_on} onChange={(e) => setAuthorisationForm({ ...authorisationForm, ended_on: e.target.value })} required /></Field> : null}
+              <Field label="Evidence" hint="PDF/JPG/PNG/WebP · private credential vault · up to 50 MB"><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="file-input" onChange={(e) => setAuthorisationForm({ ...authorisationForm, evidence: e.target.files?.[0] ?? null })} /></Field>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3"><button disabled={busy} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{editingAuthorisationId ? "Save authorisation changes" : "Submit authorisation"}</button>{editingAuthorisationId ? <button type="button" disabled={busy} onClick={resetAuthorisationForm} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700">Cancel edit</button> : null}</div>
+          </form>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Authorisation records</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Historical authorisations remain part of your career record. Only a verified, current authorisation can create the green shield.</p>
+            {companyAuthorisations.length ? <div className="mt-6 space-y-3">{companyAuthorisations.map((record) => {
+              const familyName = record.aircraft_family_id ? familyById[record.aircraft_family_id]?.display_name : record.custom_aircraft_family;
+              const variantName = record.aircraft_variant_id ? variantById[record.aircraft_variant_id]?.display_name : null;
+              const competencyName = record.competency_id ? competencyById[record.competency_id]?.label : null;
+              const current = !record.ended_on && !record.revoked_on && (!record.expires_on || !isExpired(record.expires_on));
+              return <div key={record.id} className="rounded-2xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-slate-950">{record.authorisation_name}</div><div className="mt-1 text-sm text-slate-600">{record.employer_name}</div>{[familyName, variantName, competencyName].filter(Boolean).length ? <div className="mt-1 text-xs text-slate-500">{[familyName, variantName, competencyName].filter(Boolean).join(" · ")}</div> : null}<div className="mt-1 text-xs text-slate-500">{record.issued_on ? `Issued ${formatDate(record.issued_on)}` : "Issue date not recorded"}{record.ended_on ? ` · Ended ${formatDate(record.ended_on)}` : record.expires_on ? ` · ${isExpired(record.expires_on) ? "Expired" : "Expires"} ${formatDate(record.expires_on)}` : current ? " · Current" : ""}</div></div><div className="flex items-center gap-2">{record.verification_status === "verified" && current ? <GreenShield /> : null}<EvidenceStatus status={record.verification_status} /></div></div><div className="mt-3 flex gap-2"><button type="button" disabled={busy} onClick={() => editAuthorisation(record)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Edit</button><button type="button" disabled={busy} onClick={() => void removeAuthorisation(record)} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700">Remove</button></div></div>;
+            })}</div> : <p className="mt-4 text-sm text-slate-500">No company authorisations submitted yet.</p>}
+          </section>
         </div>
       ) : null}
     </div>
