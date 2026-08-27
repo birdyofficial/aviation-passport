@@ -48,6 +48,11 @@ type Props = {
   countryCode: string | null;
   sponsorshipAvailable: boolean;
   onClose: () => void;
+  builderMode?: boolean;
+  onBack?: () => void;
+  onFinish?: () => void;
+  onPublish?: () => void;
+  publishLabel?: string;
 };
 
 const LEVELS: [RequirementLevel, string][] = [
@@ -84,7 +89,18 @@ function levelLabel(level: RequirementLevel) {
   return LEVELS.find(([value]) => value === level)?.[1] ?? level;
 }
 
-export default function DemandRequirements({ demandId, demandTitle, countryCode, sponsorshipAvailable, onClose }: Props) {
+export default function DemandRequirements({
+  demandId,
+  demandTitle,
+  countryCode,
+  sponsorshipAvailable,
+  onClose,
+  builderMode = false,
+  onBack,
+  onFinish,
+  onPublish,
+  publishLabel = "Publish Open Demand",
+}: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -298,14 +314,20 @@ export default function DemandRequirements({ demandId, demandTitle, countryCode,
   if (loading) return <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-8 text-slate-600">Loading requirements and market intelligence…</section>;
 
   return (
-    <section className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-6 lg:p-8">
+    <section className={`${builderMode ? "mt-6" : "mt-8"} rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-6 lg:p-8`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div><div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">V0.8 · Demand intelligence</div><h2 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">{demandTitle}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Define exactly what is mandatory, what can be trained, and what is merely preferred. Only Mandatory requirements shrink the available workforce pool.</p></div>
-        <button type="button" onClick={onClose} className="self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Close requirements</button>
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{builderMode ? "Step 2 of 2 · Aviation requirements" : "Demand intelligence"}</div>
+          <h2 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">{demandTitle}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Define exactly what is mandatory, what can be trained, and what is merely preferred. Only Mandatory requirements shrink the available workforce pool.</p>
+        </div>
+        {!builderMode ? <button type="button" onClick={onClose} className="self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Close requirements</button> : null}
       </div>
 
       {notice ? <div className={`mt-5 rounded-2xl border px-4 py-3 text-sm ${notice.type === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{notice.text}</div> : null}
 
+      {!builderMode ? (
+        <>
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Market Passports" value={String(baseStage?.structured_count ?? 0)} note="Non-private structured Passports" />
         <Metric label="Mandatory match" value={String(finalStage?.structured_count ?? 0)} note={`${mandatoryCount} hard requirement${mandatoryCount === 1 ? "" : "s"}`} />
@@ -326,6 +348,13 @@ export default function DemandRequirements({ demandId, demandTitle, countryCode,
           <div className="mt-4 rounded-2xl border border-slate-200 p-4"><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Requirement behaviour</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{LEVELS.map(([value,label]) => <div key={value} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${levelClass(value)}`}>{label}{value === "mandatory" ? " · hard filter" : value === "trainable" ? " · gap employer accepts" : value === "preferred" ? " · ranking signal" : " · ignored"}</div>)}</div></div>
         </div>
       </div>
+
+        </>
+      ) : (
+        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm leading-6 text-blue-900">
+          Add the aviation requirements now. You can add more than one aircraft, licence, competency or training item. Nothing is published until you finish this builder.
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <RequirementPanel title="Environment" description="Where the worker has operated: line, base, production, field support and more.">
@@ -362,6 +391,16 @@ export default function DemandRequirements({ demandId, demandTitle, countryCode,
           <div className="mt-5 space-y-3">{trainingRequirements.map((r) => <RequirementCard key={r.id} title={r.training_name} subtitle={r.must_be_current ? "Must be current" : "Historical completion accepted"} level={r.requirement_level} onEdit={() => editTraining(r)} onRemove={() => void removeTraining(r)} />)}{!trainingRequirements.length ? <Empty text="No training requirements yet." /> : null}</div>
         </RequirementPanel>
       </div>
+
+      {builderMode ? (
+        <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+          <button type="button" onClick={onBack} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Back to role & package</button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={onFinish} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Save & finish later</button>
+            <button type="button" onClick={onPublish} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white">{publishLabel}</button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

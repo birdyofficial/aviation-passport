@@ -1,5 +1,17 @@
 # Changelog
 
+## V0.8.1 — Guided Demand Builder UX
+- Reworked demand creation into one guided two-step flow
+- Step 1 captures role, location, mobility, roster, timing and compensation
+- Step 2 captures environment, aircraft, licence, competency and training requirements before publishing
+- New demands are saved invisibly as Draft between steps so requirement records have a demand ID
+- Removed the duplicate Environment selector from the basic demand form
+- Removed status selection from the creation form; publication now happens only after requirements
+- Editing an existing demand uses the same guided flow
+- Demand register is now the default employer dashboard instead of an always-open blank form
+- Market intelligence remains available separately through Requirements & market
+- No Supabase migration required
+
 ## V0.8 — Demand Requirements + Matching Intelligence
 - Added Requirements & Market workspace to every employer demand
 - Environment requirements now support Mandatory / Trainable / Preferred / Not relevant

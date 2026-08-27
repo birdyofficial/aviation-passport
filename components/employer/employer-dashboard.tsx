@@ -219,6 +219,9 @@ export default function EmployerDashboard() {
   const [editingDemandId, setEditingDemandId] = useState<string | null>(null);
   const [demandForm, setDemandForm] = useState(emptyDemandForm);
   const [requirementsDemandId, setRequirementsDemandId] = useState<string | null>(null);
+  const [builderActive, setBuilderActive] = useState(false);
+  const [builderStep, setBuilderStep] = useState<"details" | "requirements">("details");
+  const [builderWasExisting, setBuilderWasExisting] = useState(false);
 
   const selectedOrganisation = organisations.find((item) => item.id === selectedOrganisationId) ?? null;
   const activeDemands = demands.filter((item) => item.status === "open");
@@ -395,8 +398,30 @@ export default function EmployerDashboard() {
     setDemandForm(emptyDemandForm);
   }
 
+  function startNewDemand() {
+    resetDemandForm();
+    setBuilderWasExisting(false);
+    setBuilderStep("details");
+    setRequirementsDemandId(null);
+    setBuilderActive(true);
+    setNotice(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelBuilder() {
+    resetDemandForm();
+    setRequirementsDemandId(null);
+    setBuilderActive(false);
+    setBuilderStep("details");
+    setBuilderWasExisting(false);
+  }
+
   function editDemand(demand: Demand) {
     const baseComp = compensationByDemand.get(demand.id);
+    setBuilderActive(true);
+    setBuilderStep("details");
+    setBuilderWasExisting(true);
+    setRequirementsDemandId(null);
     setEditingDemandId(demand.id);
     setDemandForm({
       internal_title: demand.internal_title,
@@ -445,18 +470,11 @@ export default function EmployerDashboard() {
       if (compMin != null && compMax != null && compMax < compMin) {
         throw new Error("Maximum compensation cannot be lower than minimum compensation.");
       }
-      if (demandForm.status === "open" && (compMin == null || compMax == null)) {
-        throw new Error("Open Demand must include a transparent base compensation range. Save as Draft if compensation is not ready yet.");
-      }
-      if (demandForm.status === "open" && !demandForm.country_code) {
-        throw new Error("Open Demand needs a country so the labour market can be measured correctly.");
-      }
 
       const existing = editingDemandId ? demands.find((item) => item.id === editingDemandId) : null;
+      const preservedStatus: DemandStatus = existing?.status ?? "draft";
       const previousFilled = existing ? Math.max(0, existing.positions_required - existing.positions_remaining) : 0;
-      const nextRemaining = demandForm.status === "filled"
-        ? 0
-        : Math.max(0, positionsRequired - previousFilled);
+      const nextRemaining = preservedStatus === "filled" ? 0 : Math.max(0, positionsRequired - previousFilled);
 
       const payload = {
         organisation_id: selectedOrganisationId,
@@ -467,7 +485,7 @@ export default function EmployerDashboard() {
         seniority: demandForm.seniority.trim() || null,
         positions_required: positionsRequired,
         positions_remaining: nextRemaining,
-        status: demandForm.status,
+        status: preservedStatus,
         visibility: demandForm.visibility,
         employment_type: demandForm.employment_type,
         city: demandForm.city.trim() || null,
@@ -480,9 +498,9 @@ export default function EmployerDashboard() {
           shift: demandForm.roster_shift,
           pattern: demandForm.roster_pattern.trim() || undefined,
         },
-        opened_at: demandForm.status === "open" ? existing?.opened_at ?? new Date().toISOString() : existing?.opened_at ?? null,
-        confirmed_active_at: demandForm.status === "open" ? new Date().toISOString() : existing?.confirmed_active_at ?? null,
-        confirmation_due_at: demandForm.status === "open" ? thirtyDaysFromNowIso() : existing?.confirmation_due_at ?? null,
+        opened_at: existing?.opened_at ?? null,
+        confirmed_active_at: existing?.confirmed_active_at ?? null,
+        confirmation_due_at: existing?.confirmation_due_at ?? null,
       };
 
       let demandId = editingDemandId;
@@ -500,24 +518,6 @@ export default function EmployerDashboard() {
       }
 
       if (!demandId) throw new Error("Demand could not be saved.");
-
-      const existingEnvironmentLevels = new Map(
-        demandEnvironments
-          .filter((item) => item.demand_id === demandId)
-          .map((item) => [item.environment_id, item.requirement_level]),
-      );
-      const deleteEnv = await supabase.from("demand_environments").delete().eq("demand_id", demandId);
-      if (deleteEnv.error) throw deleteEnv.error;
-      if (demandForm.environment_ids.length) {
-        const insertEnv = await supabase.from("demand_environments").insert(
-          demandForm.environment_ids.map((environmentId) => ({
-            demand_id: demandId,
-            environment_id: environmentId,
-            requirement_level: existingEnvironmentLevels.get(environmentId) ?? "mandatory",
-          })),
-        );
-        if (insertEnv.error) throw insertEnv.error;
-      }
 
       const deleteComp = await supabase
         .from("demand_compensation_components")
@@ -538,19 +538,46 @@ export default function EmployerDashboard() {
         if (insertComp.error) throw insertComp.error;
       }
 
-      const message = editingDemandId
-        ? demandForm.status === "open"
-          ? "Open Demand updated and confirmed active."
-          : "Demand updated."
-        : demandForm.status === "open"
-          ? "Open Demand published."
-          : "Demand saved as Draft.";
-
-      resetDemandForm();
-      setNotice({ type: "success", text: message });
+      setEditingDemandId(demandId);
+      setRequirementsDemandId(demandId);
+      setBuilderStep("requirements");
+      setNotice({ type: "success", text: "Role and package saved. Now add the aviation requirements before publishing." });
       await loadDemandData(selectedOrganisationId);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save Open Demand." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishBuilder(publish: boolean) {
+    if (!editingDemandId || !selectedOrganisationId) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const currentDemand = demands.find((item) => item.id === editingDemandId);
+      const baseComp = compensationByDemand.get(editingDemandId);
+      if (publish) {
+        if (!currentDemand?.country_code) throw new Error("Choose the demand country before publishing.");
+        if (!baseComp || baseComp.amount_min == null || baseComp.amount_max == null) {
+          throw new Error("Add a transparent minimum and maximum base compensation before publishing.");
+        }
+        const { error } = await supabase.from("open_demands").update({
+          status: "open",
+          opened_at: currentDemand.opened_at ?? new Date().toISOString(),
+          confirmed_active_at: new Date().toISOString(),
+          confirmation_due_at: thirtyDaysFromNowIso(),
+        }).eq("id", editingDemandId);
+        if (error) throw error;
+      }
+      await loadDemandData(selectedOrganisationId);
+      const message = publish ? "Open Demand published." : builderWasExisting ? "Demand changes saved." : "Demand saved as Draft.";
+      cancelBuilder();
+      setNotice({ type: "success", text: message });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not finish demand." });
     } finally {
       setBusy(false);
     }
@@ -624,7 +651,7 @@ export default function EmployerDashboard() {
                 value={selectedOrganisationId}
                 onChange={(event) => {
                   setSelectedOrganisationId(event.target.value);
-                  resetDemandForm();
+                  cancelBuilder();
                 }}
               >
                 {organisations.map((organisation) => (
@@ -678,20 +705,31 @@ export default function EmployerDashboard() {
 
       {selectedOrganisation ? (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <Metric label="Active Open Demand" value={String(activeDemands.length)} />
-            <Metric label="Open positions" value={String(openPositions)} />
-            <Metric label="Draft demands" value={String(drafts)} />
+          <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid flex-1 gap-4 sm:grid-cols-3">
+              <Metric label="Active Open Demand" value={String(activeDemands.length)} />
+              <Metric label="Open positions" value={String(openPositions)} />
+              <Metric label="Draft demands" value={String(drafts)} />
+            </div>
+            {!builderActive ? <button type="button" onClick={startNewDemand} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">Create new demand</button> : null}
           </div>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          {builderActive ? (
+            <div className="mt-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className={`rounded-xl border px-4 py-3 ${builderStep === "details" ? "border-slate-900 bg-slate-950 text-white" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><div className="text-xs font-bold uppercase tracking-[0.12em] opacity-70">Step 1</div><div className="mt-1 font-semibold">Role & package</div></div>
+                  <div className={`rounded-xl border px-4 py-3 ${builderStep === "requirements" ? "border-slate-900 bg-slate-950 text-white" : "border-slate-200 bg-slate-50 text-slate-600"}`}><div className="text-xs font-bold uppercase tracking-[0.12em] opacity-70">Step 2</div><div className="mt-1 font-semibold">Aviation requirements & publish</div></div>
+                </div>
+              </div>
+
+              {builderStep === "details" ? (
+          <div className="mt-6">
             <form onSubmit={saveDemand} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{editingDemandId ? "Edit demand" : "New demand"}</div>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{editingDemandId ? "Update Open Demand" : "Declare Open Demand"}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Keep it structured and measurable. Drafts can be incomplete; anything Open must include transparent base compensation.
-                </p>
+                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Step 1 of 2 · Role & package</div>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{builderWasExisting ? "Edit demand details" : "Create demand"}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Start with the role, location, roster and compensation. The next step captures aircraft, environment, licence, competency and training requirements before anything is published.</p>
               </div>
 
               <div className="mt-6 space-y-6">
@@ -729,30 +767,6 @@ export default function EmployerDashboard() {
                   </div>
                 </Section>
 
-                <Section title="Environment">
-                  <p className="mb-3 text-xs text-slate-500">V0.7 treats selected environments as mandatory. Requirement levels become more granular in the next employer requirements build.</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {sortedEnvironments.map((environment) => {
-                      const checked = demandForm.environment_ids.includes(environment.id);
-                      return (
-                        <label key={environment.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${checked ? "border-slate-900 bg-slate-50 text-slate-950" : "border-slate-200 text-slate-700"}`}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => setDemandForm({
-                              ...demandForm,
-                              environment_ids: checked
-                                ? demandForm.environment_ids.filter((id) => id !== environment.id)
-                                : [...demandForm.environment_ids, environment.id],
-                            })}
-                          />
-                          {environment.label}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </Section>
-
                 <Section title="Roster & timing">
                   <div className="grid gap-4 md:grid-cols-2">
                     <Field label="Shift">
@@ -783,35 +797,34 @@ export default function EmployerDashboard() {
                   <p className="mt-3 text-xs text-slate-500">Native currency is authoritative. Cross-currency and purchasing-power comparison will be added above this layer later.</p>
                 </Section>
 
-                <Section title="State">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="Demand status">
-                      <select className="input" value={demandForm.status} onChange={(e) => setDemandForm({ ...demandForm, status: e.target.value as DemandStatus })}>
-                        <option value="draft">Draft</option>
-                        <option value="open">Open</option>
-                        <option value="paused">Paused</option>
-                        {editingDemandId ? <option value="filled">Filled</option> : null}
-                        {editingDemandId ? <option value="cancelled">Cancelled</option> : null}
-                      </select>
-                    </Field>
-                    <div className="flex items-end">
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
-                        Only <strong>Open</strong> demand counts as live labour-market demand. Draft, Paused, Filled and Cancelled do not.
-                      </div>
-                    </div>
-                  </div>
-                </Section>
               </div>
 
               <div className="mt-7 flex flex-wrap gap-3">
-                <button disabled={busy} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">
-                  {editingDemandId ? "Save demand changes" : demandForm.status === "open" ? "Publish Open Demand" : "Save demand"}
-                </button>
-                {editingDemandId ? <button type="button" disabled={busy} onClick={resetDemandForm} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700">Cancel edit</button> : null}
+                <button disabled={busy} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">Continue to aviation requirements</button>
+                <button type="button" disabled={busy} onClick={cancelBuilder} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700">Cancel</button>
               </div>
             </form>
-
-            <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+          </div>
+              ) : requirementsDemandId ? (() => {
+                const demand = demands.find((item) => item.id === requirementsDemandId);
+                return demand ? (
+                  <DemandRequirements
+                    demandId={demand.id}
+                    demandTitle={demand.public_title}
+                    countryCode={demand.country_code}
+                    sponsorshipAvailable={demand.sponsorship_available}
+                    builderMode
+                    onBack={() => setBuilderStep("details")}
+                    onFinish={() => void finishBuilder(false)}
+                    onPublish={() => void finishBuilder(true)}
+                    publishLabel={demand.status === "open" ? "Finish editing" : "Publish Open Demand"}
+                    onClose={() => undefined}
+                  />
+                ) : null;
+              })() : null}
+            </div>
+          ) : (
+            <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Demand register</div>
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{selectedOrganisation.name}</h2>
@@ -872,13 +885,13 @@ export default function EmployerDashboard() {
               ) : (
                 <div className="mt-6 rounded-2xl border border-dashed border-slate-300 p-8 text-center">
                   <div className="font-semibold text-slate-900">No demand declared yet</div>
-                  <p className="mt-2 text-sm text-slate-500">Create the first structured demand on the left. Start as Draft if you are still defining the role.</p>
+                  <p className="mt-2 text-sm text-slate-500">Use “Create new demand” to complete the role, package and aviation requirements in one guided flow.</p>
                 </div>
               )}
             </section>
-          </div>
+          )}
 
-          {requirementsDemandId ? (() => {
+          {!builderActive && requirementsDemandId ? (() => {
             const demand = demands.find((item) => item.id === requirementsDemandId);
             return demand ? (
               <DemandRequirements
