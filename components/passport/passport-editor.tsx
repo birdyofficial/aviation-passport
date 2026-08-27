@@ -115,7 +115,40 @@ type CurrentAuthorisation = {
   expires_on: string | null;
 };
 
-type Tab = "preview" | "identity" | "licences" | "employment";
+type TrainingRecord = {
+  id: string;
+  course_name: string;
+  provider: string | null;
+  completed_on: string | null;
+  expires_on: string | null;
+  evidence_path: string | null;
+  verification_status: string;
+  verified_at: string | null;
+};
+
+type CompetencyCatalogItem = {
+  id: string;
+  code: string;
+  label: string;
+  aircraft_specific: boolean;
+};
+
+type WorkerCompetency = {
+  id: string;
+  worker_id: string;
+  competency_id: string | null;
+  custom_competency_name: string | null;
+  aircraft_family_id: string | null;
+  aircraft_variant_id: string | null;
+  engine_id: string | null;
+  gained_on: string | null;
+  last_used_on: string | null;
+  evidence_path: string | null;
+  verification_status: string;
+  verified_at: string | null;
+};
+
+type Tab = "preview" | "identity" | "licences" | "employment" | "training";
 
 type Notice = { type: "success" | "error"; text: string } | null;
 
@@ -182,6 +215,19 @@ const ENVIRONMENT_ORDER = [
   "other",
 ];
 
+const TRAINING_OPTIONS = [
+  "Human Factors",
+  "EWIS",
+  "Fuel Tank Safety",
+  "Dangerous Goods",
+  "Safety Management System (SMS)",
+  "Continuation Training",
+  "ETOPS",
+  "RVSM",
+  "Airside / Airport Safety",
+  "First Aid",
+];
+
 function cleanCountryCode(value: string) {
   return value.trim().toUpperCase().slice(0, 2);
 }
@@ -195,6 +241,12 @@ function formatDate(value: string | null) {
 
 function formatStatus(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function isExpired(value: string | null) {
+  if (!value) return false;
+  const expiry = new Date(`${value}T23:59:59`);
+  return !Number.isNaN(expiry.getTime()) && expiry.getTime() < Date.now();
 }
 
 function EvidenceStatus({ status }: { status: string }) {
@@ -249,6 +301,8 @@ export default function PassportEditor() {
   const [employmentEnvironments, setEmploymentEnvironments] = useState<EmploymentEnvironment[]>([]);
   const [exposures, setExposures] = useState<Exposure[]>([]);
   const [authorisations, setAuthorisations] = useState<CurrentAuthorisation[]>([]);
+  const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([]);
+  const [workerCompetencies, setWorkerCompetencies] = useState<WorkerCompetency[]>([]);
 
   const [authorities, setAuthorities] = useState<Authority[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -257,10 +311,13 @@ export default function PassportEditor() {
   const [variants, setVariants] = useState<AircraftVariant[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [variantEngines, setVariantEngines] = useState<VariantEngine[]>([]);
+  const [competencyCatalog, setCompetencyCatalog] = useState<CompetencyCatalogItem[]>([]);
 
   const [identityForm, setIdentityForm] = useState<IdentityForm>(emptyProfile);
   const [editingLicenceId, setEditingLicenceId] = useState<string | null>(null);
   const [editingRatingId, setEditingRatingId] = useState<string | null>(null);
+  const [editingTrainingId, setEditingTrainingId] = useState<string | null>(null);
+  const [editingCompetencyId, setEditingCompetencyId] = useState<string | null>(null);
   const [workRightForm, setWorkRightForm] = useState({
     country_code: "",
     status: "unrestricted" as WorkRight["status"],
@@ -314,6 +371,24 @@ export default function PassportEditor() {
     exposure_end: "",
     is_current: false,
   });
+  const [trainingForm, setTrainingForm] = useState({
+    course_key: "",
+    custom_course_name: "",
+    provider: "",
+    completed_on: "",
+    expires_on: "",
+    evidence: null as File | null,
+  });
+  const [competencyForm, setCompetencyForm] = useState({
+    competency_id: "",
+    custom_competency_name: "",
+    aircraft_family_id: "",
+    aircraft_variant_id: "",
+    engine_id: "",
+    gained_on: "",
+    last_used_on: "",
+    evidence: null as File | null,
+  });
 
   async function loadData() {
     setLoading(true);
@@ -345,6 +420,9 @@ export default function PassportEditor() {
       employmentEnvironmentsResult,
       exposureResult,
       authorisationsResult,
+      trainingResult,
+      competencyCatalogResult,
+      workerCompetenciesResult,
     ] = await Promise.all([
       supabase.from("worker_profiles").select("*").maybeSingle(),
       supabase.from("worker_nationalities").select("*").order("is_primary", { ascending: false }),
@@ -362,6 +440,9 @@ export default function PassportEditor() {
       supabase.from("employment_environments").select("*"),
       supabase.from("employment_aircraft_exposure").select("*").order("created_at", { ascending: false }),
       supabase.from("worker_current_authorisations").select("*"),
+      supabase.from("training_records").select("*").order("created_at", { ascending: false }),
+      supabase.from("competency_catalog").select("*").order("label"),
+      supabase.from("worker_competencies").select("*").order("created_at", { ascending: false }),
     ]);
 
     const firstError = [
@@ -381,6 +462,9 @@ export default function PassportEditor() {
       employmentEnvironmentsResult,
       exposureResult,
       authorisationsResult,
+      trainingResult,
+      competencyCatalogResult,
+      workerCompetenciesResult,
     ].find((result) => result.error)?.error;
 
     if (firstError) {
@@ -409,6 +493,9 @@ export default function PassportEditor() {
     setEmploymentEnvironments((employmentEnvironmentsResult.data ?? []) as EmploymentEnvironment[]);
     setExposures((exposureResult.data ?? []) as Exposure[]);
     setAuthorisations((authorisationsResult.data ?? []) as CurrentAuthorisation[]);
+    setTrainingRecords((trainingResult.data ?? []) as TrainingRecord[]);
+    setCompetencyCatalog((competencyCatalogResult.data ?? []) as CompetencyCatalogItem[]);
+    setWorkerCompetencies((workerCompetenciesResult.data ?? []) as WorkerCompetency[]);
 
     const primaryNationality = loadedNationalities.find((item) => item.is_primary) ?? loadedNationalities[0];
 
@@ -848,6 +935,158 @@ export default function PassportEditor() {
     }
   }
 
+  function resetTrainingForm() {
+    setEditingTrainingId(null);
+    setTrainingForm({ course_key: "", custom_course_name: "", provider: "", completed_on: "", expires_on: "", evidence: null });
+  }
+
+  function editTraining(record: TrainingRecord) {
+    const knownCourse = TRAINING_OPTIONS.includes(record.course_name);
+    setEditingTrainingId(record.id);
+    setTrainingForm({
+      course_key: knownCourse ? record.course_name : "__custom__",
+      custom_course_name: knownCourse ? "" : record.course_name,
+      provider: record.provider ?? "",
+      completed_on: record.completed_on ?? "",
+      expires_on: record.expires_on ?? "",
+      evidence: null,
+    });
+    setNotice(record.verification_status === "verified" ? { type: "success", text: "Editing verified training will return it to verification pending when saved." } : null);
+  }
+
+  async function saveTraining(event: FormEvent) {
+    event.preventDefault();
+    if (!profile || !userId) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const existing = editingTrainingId ? trainingRecords.find((item) => item.id === editingTrainingId) : null;
+      const courseName = trainingForm.course_key === "__custom__" ? trainingForm.custom_course_name.trim() : trainingForm.course_key;
+      if (!courseName) throw new Error("Select or enter the training course.");
+      const uploadedEvidence = trainingForm.evidence ? await uploadEvidence(trainingForm.evidence, "training") : null;
+      const evidencePath = uploadedEvidence ?? existing?.evidence_path ?? null;
+      const payload = {
+        course_name: courseName,
+        provider: trainingForm.provider.trim() || null,
+        completed_on: trainingForm.completed_on || null,
+        expires_on: trainingForm.expires_on || null,
+        evidence_path: evidencePath,
+      };
+      const result = editingTrainingId
+        ? await supabase.from("training_records").update(payload).eq("id", editingTrainingId)
+        : await supabase.from("training_records").insert({ worker_id: userId, ...payload });
+      if (result.error) throw result.error;
+      if (uploadedEvidence && existing?.evidence_path && existing.evidence_path !== uploadedEvidence) {
+        await supabase.storage.from("credential-evidence").remove([existing.evidence_path]);
+      }
+      const wasEditing = Boolean(editingTrainingId);
+      resetTrainingForm();
+      setNotice({ type: "success", text: wasEditing ? "Training updated. Verification has returned to pending." : "Training added." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save training." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeTraining(record: TrainingRecord) {
+    if (!window.confirm("Remove this training record?")) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await supabase.from("training_records").delete().eq("id", record.id);
+      if (error) throw error;
+      if (record.evidence_path) await supabase.storage.from("credential-evidence").remove([record.evidence_path]);
+      if (editingTrainingId === record.id) resetTrainingForm();
+      setNotice({ type: "success", text: "Training removed." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove training." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resetCompetencyForm() {
+    setEditingCompetencyId(null);
+    setCompetencyForm({ competency_id: "", custom_competency_name: "", aircraft_family_id: "", aircraft_variant_id: "", engine_id: "", gained_on: "", last_used_on: "", evidence: null });
+  }
+
+  function editCompetency(record: WorkerCompetency) {
+    setEditingCompetencyId(record.id);
+    setCompetencyForm({
+      competency_id: record.competency_id ?? "__custom__",
+      custom_competency_name: record.custom_competency_name ?? "",
+      aircraft_family_id: record.aircraft_family_id ?? "",
+      aircraft_variant_id: record.aircraft_variant_id ?? "",
+      engine_id: record.engine_id ?? "",
+      gained_on: record.gained_on ?? "",
+      last_used_on: record.last_used_on ?? "",
+      evidence: null,
+    });
+    setNotice(record.verification_status === "verified" ? { type: "success", text: "Editing a verified competency will return it to verification pending when saved." } : null);
+  }
+
+  async function saveCompetency(event: FormEvent) {
+    event.preventDefault();
+    if (!profile || !userId) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const existing = editingCompetencyId ? workerCompetencies.find((item) => item.id === editingCompetencyId) : null;
+      const selectedCatalog = competencyCatalog.find((item) => item.id === competencyForm.competency_id);
+      const customName = competencyForm.competency_id === "__custom__" ? competencyForm.custom_competency_name.trim() : "";
+      if (!selectedCatalog && !customName) throw new Error("Select or enter a competency.");
+      if (selectedCatalog?.aircraft_specific && !competencyForm.aircraft_family_id) throw new Error("This competency is aircraft-specific. Select an aircraft family.");
+      const uploadedEvidence = competencyForm.evidence ? await uploadEvidence(competencyForm.evidence, "competencies") : null;
+      const evidencePath = uploadedEvidence ?? existing?.evidence_path ?? null;
+      const payload = {
+        competency_id: selectedCatalog?.id ?? null,
+        custom_competency_name: customName || null,
+        aircraft_family_id: competencyForm.aircraft_family_id || null,
+        aircraft_variant_id: competencyForm.aircraft_variant_id || null,
+        engine_id: competencyForm.engine_id || null,
+        gained_on: competencyForm.gained_on || null,
+        last_used_on: competencyForm.last_used_on || null,
+        evidence_path: evidencePath,
+      };
+      const result = editingCompetencyId
+        ? await supabase.from("worker_competencies").update(payload).eq("id", editingCompetencyId)
+        : await supabase.from("worker_competencies").insert({ worker_id: userId, ...payload });
+      if (result.error) throw result.error;
+      if (uploadedEvidence && existing?.evidence_path && existing.evidence_path !== uploadedEvidence) {
+        await supabase.storage.from("credential-evidence").remove([existing.evidence_path]);
+      }
+      const wasEditing = Boolean(editingCompetencyId);
+      resetCompetencyForm();
+      setNotice({ type: "success", text: wasEditing ? "Competency updated. Verification has returned to pending." : "Competency added." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save competency." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeCompetency(record: WorkerCompetency) {
+    if (!window.confirm("Remove this competency?")) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await supabase.from("worker_competencies").delete().eq("id", record.id);
+      if (error) throw error;
+      if (record.evidence_path) await supabase.storage.from("credential-evidence").remove([record.evidence_path]);
+      if (editingCompetencyId === record.id) resetCompetencyForm();
+      setNotice({ type: "success", text: "Competency removed." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove competency." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -903,13 +1142,22 @@ export default function PassportEditor() {
       });
   }, [families, manufacturerById]);
 
+  const competencyById = useMemo(() => Object.fromEntries(competencyCatalog.map((item) => [item.id, item])), [competencyCatalog]);
+
   const filteredRatingVariants = ratingForm.aircraft_family_id === "__custom__" ? [] : variants.filter((item) => item.family_id === ratingForm.aircraft_family_id);
   const filteredExposureVariants = exposureForm.aircraft_family_id === "__custom__" ? [] : variants.filter((item) => item.family_id === exposureForm.aircraft_family_id);
+  const filteredCompetencyVariants = competencyForm.aircraft_family_id ? variants.filter((item) => item.family_id === competencyForm.aircraft_family_id) : [];
   const allowedExposureEngineIds = exposureForm.aircraft_variant_id
     ? new Set(variantEngines.filter((item) => item.variant_id === exposureForm.aircraft_variant_id).map((item) => item.engine_id))
     : null;
   const filteredExposureEngines = allowedExposureEngineIds?.size
     ? engines.filter((item) => allowedExposureEngineIds.has(item.id))
+    : engines;
+  const allowedCompetencyEngineIds = competencyForm.aircraft_variant_id
+    ? new Set(variantEngines.filter((item) => item.variant_id === competencyForm.aircraft_variant_id).map((item) => item.engine_id))
+    : null;
+  const filteredCompetencyEngines = allowedCompetencyEngineIds?.size
+    ? engines.filter((item) => allowedCompetencyEngineIds.has(item.id))
     : engines;
 
   const aircraftSummary = useMemo(() => {
@@ -986,6 +1234,7 @@ export default function PassportEditor() {
           ["identity", "Professional Identity"],
           ["licences", "Licences & Ratings"],
           ["employment", "Employment & Aircraft"],
+          ["training", "Training & Competencies"],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -1077,6 +1326,43 @@ export default function PassportEditor() {
                   ))}
                 </div>
               ) : <p className="mt-4 text-sm text-slate-500">No licences added yet.</p>}
+            </div>
+
+            <div className="mt-8 border-t border-slate-100 pt-6">
+              <h3 className="text-lg font-semibold text-slate-950">Training & Competencies</h3>
+              {trainingRecords.length || workerCompetencies.length ? (
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Training</div>
+                    <div className="mt-2 space-y-2">
+                      {trainingRecords.length ? trainingRecords.map((record) => (
+                        <div key={record.id} className="rounded-xl bg-slate-50 px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-slate-900">{record.course_name}</span>
+                            {record.expires_on ? <span className={`text-xs font-semibold ${isExpired(record.expires_on) ? "text-rose-600" : "text-emerald-600"}`}>{isExpired(record.expires_on) ? "Expired" : "Current"}</span> : null}
+                          </div>
+                          {record.provider ? <div className="mt-1 text-xs text-slate-500">{record.provider}</div> : null}
+                        </div>
+                      )) : <p className="text-sm text-slate-500">No training recorded.</p>}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Competencies</div>
+                    <div className="mt-2 space-y-2">
+                      {workerCompetencies.length ? workerCompetencies.map((record) => {
+                        const competencyName = record.competency_id ? competencyById[record.competency_id]?.label : record.custom_competency_name;
+                        const aircraftName = record.aircraft_family_id ? familyById[record.aircraft_family_id]?.display_name : null;
+                        return (
+                          <div key={record.id} className="rounded-xl bg-slate-50 px-3 py-2.5">
+                            <div className="text-sm font-semibold text-slate-900">{competencyName || "Competency"}</div>
+                            {aircraftName ? <div className="mt-1 text-xs text-slate-500">{aircraftName}</div> : null}
+                          </div>
+                        );
+                      }) : <p className="text-sm text-slate-500">No competencies recorded.</p>}
+                    </div>
+                  </div>
+                </div>
+              ) : <p className="mt-4 text-sm text-slate-500">No training or competencies added yet.</p>}
             </div>
           </section>
 
@@ -1319,6 +1605,117 @@ export default function PassportEditor() {
               return <div key={employment.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="font-semibold text-slate-950">{employment.employer_name}</div><div className="mt-1 text-sm text-slate-600">{employment.job_title}{employment.discipline ? ` · ${employment.discipline}` : ""}</div><div className="mt-1 text-xs text-slate-500">{formatDate(employment.start_date)} — {employment.is_current ? "Present" : formatDate(employment.end_date)}</div></div><span className={`self-start rounded-full px-2.5 py-1 text-xs font-semibold ${employment.employer_confirmed ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{employment.employer_confirmed ? "Employer confirmed" : "Worker record"}</span></div>{envLabels.length ? <div className="mt-3 flex flex-wrap gap-2">{envLabels.map((label) => <span key={label} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{label}</span>)}</div> : null}{employmentExposure.length ? <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{employmentExposure.map((exposure) => <div key={exposure.id} className="rounded-xl bg-slate-50 px-3 py-3"><div className="flex items-center gap-2 font-semibold text-slate-900"><BlueDot />{exposure.aircraft_family_id ? familyById[exposure.aircraft_family_id]?.display_name : exposure.custom_aircraft_family || "Aircraft"}{exposure.aircraft_variant_id ? ` · ${variantById[exposure.aircraft_variant_id]?.display_name}` : ""}</div><div className="mt-1 text-xs text-slate-500">{formatStatus(exposure.exposure)} exposure · {exposure.exposure_start ? formatDate(exposure.exposure_start) : "Start not recorded"} — {exposure.exposure_end ? formatDate(exposure.exposure_end) : "Present"}</div>{exposure.engine_id ? <div className="mt-1 text-xs text-slate-500">{engineById[exposure.engine_id]?.display_name}</div> : null}</div>)}</div> : null}</div>;
             })}</div> : <p className="mt-3 text-sm text-slate-500">No employment records yet.</p>}
           </section>
+        </div>
+      ) : null}
+
+      {tab === "training" && profile ? (
+        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+          <div className="space-y-6">
+            <form onSubmit={saveTraining} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{editingTrainingId ? "Edit Training" : "Add Training"}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Formal courses and recurrent training. Exact provider, dates and evidence only.</p>
+              <div className="mt-6 space-y-4">
+                <Field label="Course">
+                  <select className="input" value={trainingForm.course_key} onChange={(e) => setTrainingForm({ ...trainingForm, course_key: e.target.value, custom_course_name: e.target.value === "__custom__" ? trainingForm.custom_course_name : "" })} required>
+                    <option value="">Select course</option>
+                    {TRAINING_OPTIONS.map((course) => <option key={course} value={course}>{course}</option>)}
+                    <option value="__custom__">Not listed — enter exact course name</option>
+                  </select>
+                </Field>
+                {trainingForm.course_key === "__custom__" ? <Field label="Exact course name"><input className="input" value={trainingForm.custom_course_name} onChange={(e) => setTrainingForm({ ...trainingForm, custom_course_name: e.target.value })} required /></Field> : null}
+                <Field label="Provider / issuing organisation"><input className="input" value={trainingForm.provider} onChange={(e) => setTrainingForm({ ...trainingForm, provider: e.target.value })} /></Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Completed / issued"><input type="date" className="input" value={trainingForm.completed_on} onChange={(e) => setTrainingForm({ ...trainingForm, completed_on: e.target.value })} /></Field>
+                  <Field label="Expiry (if applicable)"><input type="date" className="input" value={trainingForm.expires_on} onChange={(e) => setTrainingForm({ ...trainingForm, expires_on: e.target.value })} /></Field>
+                </div>
+                <Field label="Evidence" hint="PDF/JPG/PNG/WebP · private credential vault · up to 50 MB"><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="file-input" onChange={(e) => setTrainingForm({ ...trainingForm, evidence: e.target.files?.[0] ?? null })} /></Field>
+              </div>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button disabled={busy} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{editingTrainingId ? "Save training changes" : "Add training"}</button>
+                {editingTrainingId ? <button type="button" disabled={busy} onClick={resetTrainingForm} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700">Cancel edit</button> : null}
+              </div>
+            </form>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-950">Training records</h3>
+              {trainingRecords.length ? <div className="mt-4 space-y-3">{trainingRecords.map((record) => (
+                <div key={record.id} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-slate-950">{record.course_name}</div>
+                      {record.provider ? <div className="mt-1 text-sm text-slate-600">{record.provider}</div> : null}
+                      <div className="mt-1 text-xs text-slate-500">{record.completed_on ? `Completed ${formatDate(record.completed_on)}` : "Completion date not recorded"}{record.expires_on ? ` · ${isExpired(record.expires_on) ? "Expired" : "Expires"} ${formatDate(record.expires_on)}` : " · No expiry recorded"}</div>
+                    </div>
+                    <EvidenceStatus status={record.verification_status} />
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button type="button" disabled={busy} onClick={() => editTraining(record)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Edit</button>
+                    <button type="button" disabled={busy} onClick={() => void removeTraining(record)} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700">Remove</button>
+                  </div>
+                </div>
+              ))}</div> : <p className="mt-3 text-sm text-slate-500">No training records yet.</p>}
+            </section>
+          </div>
+
+          <div className="space-y-6">
+            <form onSubmit={saveCompetency} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{editingCompetencyId ? "Edit Competency" : "Add Competency"}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Technical capability, separate from training and company authorisation.</p>
+              <div className="mt-6 space-y-4">
+                <Field label="Competency">
+                  <select className="input" value={competencyForm.competency_id} onChange={(e) => setCompetencyForm({ ...competencyForm, competency_id: e.target.value, custom_competency_name: "", aircraft_family_id: "", aircraft_variant_id: "", engine_id: "" })} required>
+                    <option value="">Select competency</option>
+                    {competencyCatalog.map((item) => <option key={item.id} value={item.id}>{item.label}{item.aircraft_specific ? " — aircraft specific" : ""}</option>)}
+                    <option value="__custom__">Not listed — enter competency</option>
+                  </select>
+                </Field>
+                {competencyForm.competency_id === "__custom__" ? <Field label="Exact competency"><input className="input" value={competencyForm.custom_competency_name} onChange={(e) => setCompetencyForm({ ...competencyForm, custom_competency_name: e.target.value })} required /></Field> : null}
+                <Field label={`Aircraft family${competencyCatalog.find((item) => item.id === competencyForm.competency_id)?.aircraft_specific ? "" : " (optional)"}`}>
+                  <select className="input" value={competencyForm.aircraft_family_id} onChange={(e) => setCompetencyForm({ ...competencyForm, aircraft_family_id: e.target.value, aircraft_variant_id: "", engine_id: "" })}>
+                    <option value="">No aircraft specified</option>
+                    {aircraftFamilyGroups.map((group) => <optgroup key={group.manufacturerName} label={group.manufacturerName}>{group.families.map((family) => <option key={family.id} value={family.id}>{family.display_name}</option>)}</optgroup>)}
+                  </select>
+                </Field>
+                {competencyForm.aircraft_family_id ? <Field label="Variant (optional)"><select className="input" value={competencyForm.aircraft_variant_id} onChange={(e) => setCompetencyForm({ ...competencyForm, aircraft_variant_id: e.target.value, engine_id: "" })}><option value="">All / not specified</option>{filteredCompetencyVariants.map((variant) => <option key={variant.id} value={variant.id}>{variant.display_name}</option>)}</select></Field> : null}
+                {competencyForm.aircraft_variant_id && filteredCompetencyEngines.length ? <Field label="Engine (optional)"><select className="input" value={competencyForm.engine_id} onChange={(e) => setCompetencyForm({ ...competencyForm, engine_id: e.target.value })}><option value="">Not specified</option>{filteredCompetencyEngines.map((engine) => <option key={engine.id} value={engine.id}>{engine.display_name}</option>)}</select></Field> : null}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Gained / qualified on"><input type="date" className="input" value={competencyForm.gained_on} onChange={(e) => setCompetencyForm({ ...competencyForm, gained_on: e.target.value })} /></Field>
+                  <Field label="Last used (optional)"><input type="date" className="input" value={competencyForm.last_used_on} onChange={(e) => setCompetencyForm({ ...competencyForm, last_used_on: e.target.value })} /></Field>
+                </div>
+                <Field label="Evidence" hint="PDF/JPG/PNG/WebP · private credential vault · up to 50 MB"><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="file-input" onChange={(e) => setCompetencyForm({ ...competencyForm, evidence: e.target.files?.[0] ?? null })} /></Field>
+              </div>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button disabled={busy} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{editingCompetencyId ? "Save competency changes" : "Add competency"}</button>
+                {editingCompetencyId ? <button type="button" disabled={busy} onClick={resetCompetencyForm} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700">Cancel edit</button> : null}
+              </div>
+            </form>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-950">Competencies</h3>
+              {workerCompetencies.length ? <div className="mt-4 space-y-3">{workerCompetencies.map((record) => {
+                const competencyName = record.competency_id ? competencyById[record.competency_id]?.label : record.custom_competency_name;
+                const familyName = record.aircraft_family_id ? familyById[record.aircraft_family_id]?.display_name : null;
+                const variantName = record.aircraft_variant_id ? variantById[record.aircraft_variant_id]?.display_name : null;
+                const engineName = record.engine_id ? engineById[record.engine_id]?.display_name : null;
+                return (
+                  <div key={record.id} className="rounded-2xl border border-slate-200 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-slate-950">{competencyName || "Competency"}</div>
+                        {[familyName, variantName, engineName].filter(Boolean).length ? <div className="mt-1 text-sm text-slate-600">{[familyName, variantName, engineName].filter(Boolean).join(" · ")}</div> : null}
+                        <div className="mt-1 text-xs text-slate-500">{record.gained_on ? `Gained ${formatDate(record.gained_on)}` : "Qualification date not recorded"}{record.last_used_on ? ` · Last used ${formatDate(record.last_used_on)}` : ""}</div>
+                      </div>
+                      <EvidenceStatus status={record.verification_status} />
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button type="button" disabled={busy} onClick={() => editCompetency(record)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Edit</button>
+                      <button type="button" disabled={busy} onClick={() => void removeCompetency(record)} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700">Remove</button>
+                    </div>
+                  </div>
+                );
+              })}</div> : <p className="mt-3 text-sm text-slate-500">No competencies added yet.</p>}
+            </section>
+          </div>
         </div>
       ) : null}
     </div>
