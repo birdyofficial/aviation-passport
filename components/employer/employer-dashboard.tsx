@@ -4,6 +4,7 @@ import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { COUNTRIES, countryLabel } from "@/lib/reference/countries";
+import DemandRequirements from "@/components/employer/demand-requirements";
 
 type Organisation = {
   id: string;
@@ -217,6 +218,7 @@ export default function EmployerDashboard() {
 
   const [editingDemandId, setEditingDemandId] = useState<string | null>(null);
   const [demandForm, setDemandForm] = useState(emptyDemandForm);
+  const [requirementsDemandId, setRequirementsDemandId] = useState<string | null>(null);
 
   const selectedOrganisation = organisations.find((item) => item.id === selectedOrganisationId) ?? null;
   const activeDemands = demands.filter((item) => item.status === "open");
@@ -499,6 +501,11 @@ export default function EmployerDashboard() {
 
       if (!demandId) throw new Error("Demand could not be saved.");
 
+      const existingEnvironmentLevels = new Map(
+        demandEnvironments
+          .filter((item) => item.demand_id === demandId)
+          .map((item) => [item.environment_id, item.requirement_level]),
+      );
       const deleteEnv = await supabase.from("demand_environments").delete().eq("demand_id", demandId);
       if (deleteEnv.error) throw deleteEnv.error;
       if (demandForm.environment_ids.length) {
@@ -506,7 +513,7 @@ export default function EmployerDashboard() {
           demandForm.environment_ids.map((environmentId) => ({
             demand_id: demandId,
             environment_id: environmentId,
-            requirement_level: "mandatory",
+            requirement_level: existingEnvironmentLevels.get(environmentId) ?? "mandatory",
           })),
         );
         if (insertEnv.error) throw insertEnv.error;
@@ -847,6 +854,7 @@ export default function EmployerDashboard() {
 
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button type="button" disabled={busy} onClick={() => editDemand(demand)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Edit</button>
+                          <button type="button" disabled={busy} onClick={() => setRequirementsDemandId(demand.id)} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Requirements & market</button>
                           {demand.status !== "open" && demand.status !== "filled" && demand.status !== "cancelled" ? (
                             <button type="button" disabled={busy} onClick={() => void changeDemandStatus(demand, "open")} className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Open demand</button>
                           ) : null}
@@ -869,6 +877,19 @@ export default function EmployerDashboard() {
               )}
             </section>
           </div>
+
+          {requirementsDemandId ? (() => {
+            const demand = demands.find((item) => item.id === requirementsDemandId);
+            return demand ? (
+              <DemandRequirements
+                demandId={demand.id}
+                demandTitle={demand.public_title}
+                countryCode={demand.country_code}
+                sponsorshipAvailable={demand.sponsorship_available}
+                onClose={() => setRequirementsDemandId(null)}
+              />
+            ) : null;
+          })() : null}
         </>
       ) : null}
     </div>

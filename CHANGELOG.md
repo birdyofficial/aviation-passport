@@ -1,5 +1,20 @@
 # Changelog
 
+## V0.8 — Demand Requirements + Matching Intelligence
+- Added Requirements & Market workspace to every employer demand
+- Environment requirements now support Mandatory / Trainable / Preferred / Not relevant
+- Added structured aircraft requirements with separate experience, rating and company-authorisation levels
+- Added minimum exposure and aircraft recency criteria
+- Added structured global licence requirements, issuing authority/country, category and conversion acceptance
+- Added competency requirements with aircraft mapping and explicit recency in months
+- Added formal training requirements with current/not-expired handling
+- Added Not Listed fallbacks for aircraft, issuing authority, licence system and competency requirements
+- Added controlled aggregate supply-funnel RPC; no individual worker data is returned
+- Supply funnel separates structured, receptive and verified supply
+- Only Mandatory requirements hard-filter the pool; Trainable and Preferred remain non-excluding
+- Work-right eligibility is applied automatically from demand country and sponsorship policy
+- Employer can watch the aggregate pool narrow as requirements change
+
 ## V0.7 — Employer Foundation + Open Demand
 - Added protected Employer Portal at `/employer`
 - Organisation creation with automatic creator membership bootstrap
