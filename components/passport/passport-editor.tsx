@@ -172,6 +172,8 @@ type MarketPreference = {
   worker_id: string;
   earliest_start_date: string | null;
   notice_days: number | null;
+  notice_value: number | null;
+  notice_unit: "days" | "weeks" | "months" | null;
   willing_to_relocate: boolean;
   willing_fifo: boolean;
   willing_dido: boolean;
@@ -294,6 +296,7 @@ const ROSTER_FLEXIBILITY_OPTIONS = [
   ["any", "Any roster"],
   ["shift_ok", "Shift / rotating rosters OK"],
   ["days_preferred", "Day shift preferred"],
+  ["nights_preferred", "Night shift preferred"],
   ["weekdays_preferred", "Standard weekdays preferred"],
 ] as const;
 
@@ -325,6 +328,16 @@ function isExpired(value: string | null) {
   if (!value) return false;
   const expiry = new Date(`${value}T23:59:59`);
   return !Number.isNaN(expiry.getTime()) && expiry.getTime() < Date.now();
+}
+
+function noticePeriodLabel(preference: MarketPreference) {
+  if (preference.notice_value != null && preference.notice_unit) {
+    const singular = preference.notice_value === 1
+      ? preference.notice_unit.replace(/s$/, "")
+      : preference.notice_unit;
+    return `${preference.notice_value} ${singular} notice`;
+  }
+  return preference.notice_days != null ? `${preference.notice_days} days notice` : "Not specified";
 }
 
 function EvidenceStatus({ status }: { status: string }) {
@@ -491,7 +504,8 @@ export default function PassportEditor() {
 
   const [marketForm, setMarketForm] = useState({
     earliest_start_date: "",
-    notice_days: "",
+    notice_value: "",
+    notice_unit: "weeks" as "days" | "weeks" | "months",
     willing_to_relocate: false,
     willing_fifo: false,
     willing_dido: false,
@@ -642,7 +656,12 @@ export default function PassportEditor() {
 
     setMarketForm({
       earliest_start_date: loadedMarketPreference?.earliest_start_date ?? "",
-      notice_days: loadedMarketPreference?.notice_days == null ? "" : String(loadedMarketPreference.notice_days),
+      notice_value: loadedMarketPreference?.notice_value != null
+        ? String(loadedMarketPreference.notice_value)
+        : loadedMarketPreference?.notice_days != null
+          ? String(loadedMarketPreference.notice_days)
+          : "",
+      notice_unit: loadedMarketPreference?.notice_unit ?? "days",
       willing_to_relocate: loadedMarketPreference?.willing_to_relocate ?? false,
       willing_fifo: loadedMarketPreference?.willing_fifo ?? false,
       willing_dido: loadedMarketPreference?.willing_dido ?? false,
@@ -1388,10 +1407,17 @@ export default function PassportEditor() {
       if (minimumCompensation != null && (!Number.isFinite(minimumCompensation) || minimumCompensation < 0)) {
         throw new Error("Enter a valid minimum compensation amount.");
       }
-      const noticeDays = marketForm.notice_days.trim() ? Number(marketForm.notice_days) : null;
-      if (noticeDays != null && (!Number.isInteger(noticeDays) || noticeDays < 0)) {
-        throw new Error("Notice period must be a whole number of days.");
+      const noticeValue = marketForm.notice_value.trim() ? Number(marketForm.notice_value) : null;
+      if (noticeValue != null && (!Number.isInteger(noticeValue) || noticeValue < 0)) {
+        throw new Error("Notice period must be a whole number.");
       }
+      const noticeDays = noticeValue == null
+        ? null
+        : marketForm.notice_unit === "weeks"
+          ? noticeValue * 7
+          : marketForm.notice_unit === "months"
+            ? noticeValue * 30
+            : noticeValue;
       const currency = marketForm.minimum_compensation_currency.trim().toUpperCase().slice(0, 3);
       if (minimumCompensation != null && currency.length !== 3) {
         throw new Error("Enter a three-letter currency code for minimum compensation.");
@@ -1401,6 +1427,8 @@ export default function PassportEditor() {
         worker_id: userId,
         earliest_start_date: marketForm.earliest_start_date || null,
         notice_days: noticeDays,
+        notice_value: noticeValue,
+        notice_unit: noticeValue == null ? null : marketForm.notice_unit,
         willing_to_relocate: marketForm.willing_to_relocate,
         willing_fifo: marketForm.willing_fifo,
         willing_dido: marketForm.willing_dido,
@@ -1821,7 +1849,7 @@ export default function PassportEditor() {
                 <div className="mt-3 space-y-3 text-sm">
                   <div className="rounded-xl bg-slate-50 p-3">
                     <div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Availability</div>
-                    <div className="mt-1 font-semibold text-slate-900">{marketPreference.earliest_start_date ? `From ${formatDate(marketPreference.earliest_start_date)}` : marketPreference.notice_days != null ? `${marketPreference.notice_days} days notice` : "Not specified"}</div>
+                    <div className="mt-1 font-semibold text-slate-900">{marketPreference.earliest_start_date ? `From ${formatDate(marketPreference.earliest_start_date)}` : noticePeriodLabel(marketPreference)}</div>
                   </div>
                   {[marketPreference.willing_to_relocate, marketPreference.willing_fifo, marketPreference.willing_dido, marketPreference.willing_commute, marketPreference.willing_international, marketPreference.willing_temporary_assignment].some(Boolean) ? (
                     <div className="flex flex-wrap gap-2">
@@ -1834,6 +1862,7 @@ export default function PassportEditor() {
                     </div>
                   ) : null}
                   {locationPreferences.filter((item) => item.preference !== "not_interested").length ? <div><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Locations</div><div className="mt-1 text-slate-700">{locationPreferences.filter((item) => item.preference !== "not_interested").slice(0, 4).map((item) => [item.city, countryLabel(item.country_code)].filter(Boolean).join(", ")).join(" · ")}{locationPreferences.filter((item) => item.preference !== "not_interested").length > 4 ? " · …" : ""}</div></div> : null}
+                  {marketPreference.roster_preferences?.flexibility && marketPreference.roster_preferences.flexibility !== "any" ? <div><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Roster</div><div className="mt-1 text-slate-700">{ROSTER_FLEXIBILITY_OPTIONS.find(([value]) => value === marketPreference.roster_preferences?.flexibility)?.[1] ?? formatStatus(marketPreference.roster_preferences.flexibility)}{marketPreference.roster_preferences.preferred_pattern ? ` · ${marketPreference.roster_preferences.preferred_pattern}` : ""}</div></div> : marketPreference.roster_preferences?.preferred_pattern ? <div><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Roster</div><div className="mt-1 text-slate-700">{marketPreference.roster_preferences.preferred_pattern}</div></div> : null}
                   {marketPreference.minimum_compensation != null ? <div><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Compensation</div><div className="mt-1 text-slate-700">{marketPreference.compensation_visibility === "visible" ? `${marketPreference.minimum_compensation_currency ?? profile.preferred_currency} ${Number(marketPreference.minimum_compensation).toLocaleString()} / ${marketPreference.minimum_compensation_period}` : marketPreference.compensation_visibility === "compatibility_only" ? "Compatibility only — amount hidden" : "Private"}</div></div> : null}
                 </div>
               ) : <p className="mt-2 text-sm text-slate-500">No market preferences saved.</p>}
@@ -2245,7 +2274,16 @@ export default function PassportEditor() {
               <h3 className="font-semibold text-slate-950">Availability</h3>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <Field label="Earliest start date" hint="Leave blank if availability is better represented by notice period"><input type="date" className="input" value={marketForm.earliest_start_date} onChange={(e) => setMarketForm({ ...marketForm, earliest_start_date: e.target.value })} /></Field>
-                <Field label="Notice period (days)"><input type="number" min="0" step="1" className="input" value={marketForm.notice_days} onChange={(e) => setMarketForm({ ...marketForm, notice_days: e.target.value })} placeholder="e.g. 28" /></Field>
+                <Field label="Notice period">
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <input type="number" min="0" step="1" className="input" value={marketForm.notice_value} onChange={(e) => setMarketForm({ ...marketForm, notice_value: e.target.value })} placeholder="e.g. 4" />
+                    <select className="input min-w-28" value={marketForm.notice_unit} onChange={(e) => setMarketForm({ ...marketForm, notice_unit: e.target.value as "days" | "weeks" | "months" })}>
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                    </select>
+                  </div>
+                </Field>
               </div>
             </div>
 

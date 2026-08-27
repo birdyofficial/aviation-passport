@@ -1,5 +1,12 @@
 # Changelog
 
+## V0.6.1 — Market Preference UX
+- Notice period now supports days, weeks or months
+- Original notice value/unit is preserved for display and editing
+- A normalized day value remains available internally for matching
+- Added Night shift preferred as a structured roster preference
+- Roster preference now appears in Passport Preview when specified
+
 ## V0.6 — Market Preferences
 - Availability and notice period
 - Mobility: relocation, FIFO, DIDO, commuting, permanent international roles, temporary assignments
