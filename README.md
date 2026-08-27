@@ -32,3 +32,7 @@ The `/passport` area now includes the first real database-backed worker Passport
 - calculated blue dot / gold star / green shield Passport preview
 
 Run `SUPABASE-UPDATE-V0.2.sql` once before using credential uploads.
+
+
+## Project history
+See `CHANGELOG.md` and `supabase/migrations/` for version history.

@@ -168,7 +168,39 @@ type WorkerCompetency = {
   verified_at: string | null;
 };
 
-type Tab = "preview" | "identity" | "licences" | "employment" | "training" | "authorisations";
+type MarketPreference = {
+  worker_id: string;
+  earliest_start_date: string | null;
+  notice_days: number | null;
+  willing_to_relocate: boolean;
+  willing_fifo: boolean;
+  willing_dido: boolean;
+  willing_commute: boolean;
+  willing_international: boolean;
+  willing_temporary_assignment: boolean;
+  preferred_employment_types: string[];
+  minimum_compensation: number | null;
+  minimum_compensation_currency: string | null;
+  minimum_compensation_period: "hour" | "day" | "week" | "month" | "year" | "one_off";
+  compensation_visibility: "private" | "compatibility_only" | "visible";
+  roster_preferences: { flexibility?: string; preferred_pattern?: string } | null;
+};
+
+type WorkerEnvironmentPreference = {
+  worker_id: string;
+  environment_id: number;
+};
+
+type LocationPreference = {
+  id: string;
+  worker_id: string;
+  country_code: string;
+  city: string | null;
+  preference: "preferred" | "acceptable" | "exceptional_only" | "not_interested";
+  relocation_mode: string | null;
+};
+
+type Tab = "preview" | "identity" | "licences" | "employment" | "training" | "authorisations" | "market";
 
 type Notice = { type: "success" | "error"; text: string } | null;
 
@@ -248,6 +280,32 @@ const TRAINING_OPTIONS = [
   "First Aid",
 ];
 
+const EMPLOYMENT_TYPE_OPTIONS = [
+  ["permanent", "Permanent"],
+  ["fixed_term", "Fixed term"],
+  ["contractor", "Contractor"],
+  ["casual", "Casual"],
+  ["part_time", "Part time"],
+  ["agency", "Agency"],
+  ["self_employed", "Self-employed"],
+] as const;
+
+const ROSTER_FLEXIBILITY_OPTIONS = [
+  ["any", "Any roster"],
+  ["shift_ok", "Shift / rotating rosters OK"],
+  ["days_preferred", "Day shift preferred"],
+  ["weekdays_preferred", "Standard weekdays preferred"],
+] as const;
+
+const LOCATION_MODE_OPTIONS = [
+  ["any", "Any suitable arrangement"],
+  ["relocate", "Relocate"],
+  ["fifo", "FIFO"],
+  ["dido", "DIDO"],
+  ["commute", "Commute"],
+  ["temporary_assignment", "Temporary assignment"],
+] as const;
+
 function cleanCountryCode(value: string) {
   return value.trim().toUpperCase().slice(0, 2);
 }
@@ -324,6 +382,9 @@ export default function PassportEditor() {
   const [companyAuthorisations, setCompanyAuthorisations] = useState<CompanyAuthorisation[]>([]);
   const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([]);
   const [workerCompetencies, setWorkerCompetencies] = useState<WorkerCompetency[]>([]);
+  const [marketPreference, setMarketPreference] = useState<MarketPreference | null>(null);
+  const [marketEnvironmentPreferences, setMarketEnvironmentPreferences] = useState<WorkerEnvironmentPreference[]>([]);
+  const [locationPreferences, setLocationPreferences] = useState<LocationPreference[]>([]);
 
   const [authorities, setAuthorities] = useState<Authority[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -340,6 +401,7 @@ export default function PassportEditor() {
   const [editingTrainingId, setEditingTrainingId] = useState<string | null>(null);
   const [editingCompetencyId, setEditingCompetencyId] = useState<string | null>(null);
   const [editingAuthorisationId, setEditingAuthorisationId] = useState<string | null>(null);
+  const [editingLocationPreferenceId, setEditingLocationPreferenceId] = useState<string | null>(null);
   const [workRightForm, setWorkRightForm] = useState({
     country_code: "",
     status: "unrestricted" as WorkRight["status"],
@@ -427,6 +489,32 @@ export default function PassportEditor() {
     evidence: null as File | null,
   });
 
+  const [marketForm, setMarketForm] = useState({
+    earliest_start_date: "",
+    notice_days: "",
+    willing_to_relocate: false,
+    willing_fifo: false,
+    willing_dido: false,
+    willing_commute: false,
+    willing_international: false,
+    willing_temporary_assignment: false,
+    preferred_employment_types: [] as string[],
+    environment_ids: [] as number[],
+    minimum_compensation: "",
+    minimum_compensation_currency: "AUD",
+    minimum_compensation_period: "year" as MarketPreference["minimum_compensation_period"],
+    compensation_visibility: "compatibility_only" as MarketPreference["compensation_visibility"],
+    roster_flexibility: "any",
+    preferred_roster_pattern: "",
+  });
+
+  const [locationPreferenceForm, setLocationPreferenceForm] = useState({
+    country_code: "",
+    city: "",
+    preference: "preferred" as LocationPreference["preference"],
+    relocation_mode: "any",
+  });
+
   async function loadData() {
     setLoading(true);
     setNotice(null);
@@ -461,6 +549,9 @@ export default function PassportEditor() {
       trainingResult,
       competencyCatalogResult,
       workerCompetenciesResult,
+      marketPreferenceResult,
+      marketEnvironmentPreferencesResult,
+      locationPreferencesResult,
     ] = await Promise.all([
       supabase.from("worker_profiles").select("*").maybeSingle(),
       supabase.from("worker_nationalities").select("*").order("is_primary", { ascending: false }),
@@ -482,6 +573,9 @@ export default function PassportEditor() {
       supabase.from("training_records").select("*").order("created_at", { ascending: false }),
       supabase.from("competency_catalog").select("*").order("label"),
       supabase.from("worker_competencies").select("*").order("created_at", { ascending: false }),
+      supabase.from("worker_market_preferences").select("*").maybeSingle(),
+      supabase.from("worker_environment_preferences").select("*"),
+      supabase.from("worker_location_preferences").select("*").order("created_at", { ascending: true }),
     ]);
 
     const firstError = [
@@ -505,6 +599,9 @@ export default function PassportEditor() {
       trainingResult,
       competencyCatalogResult,
       workerCompetenciesResult,
+      marketPreferenceResult,
+      marketEnvironmentPreferencesResult,
+      locationPreferencesResult,
     ].find((result) => result.error)?.error;
 
     if (firstError) {
@@ -537,6 +634,30 @@ export default function PassportEditor() {
     setTrainingRecords((trainingResult.data ?? []) as TrainingRecord[]);
     setCompetencyCatalog((competencyCatalogResult.data ?? []) as CompetencyCatalogItem[]);
     setWorkerCompetencies((workerCompetenciesResult.data ?? []) as WorkerCompetency[]);
+    const loadedMarketPreference = marketPreferenceResult.data as MarketPreference | null;
+    const loadedMarketEnvironmentPreferences = (marketEnvironmentPreferencesResult.data ?? []) as WorkerEnvironmentPreference[];
+    setMarketPreference(loadedMarketPreference);
+    setMarketEnvironmentPreferences(loadedMarketEnvironmentPreferences);
+    setLocationPreferences((locationPreferencesResult.data ?? []) as LocationPreference[]);
+
+    setMarketForm({
+      earliest_start_date: loadedMarketPreference?.earliest_start_date ?? "",
+      notice_days: loadedMarketPreference?.notice_days == null ? "" : String(loadedMarketPreference.notice_days),
+      willing_to_relocate: loadedMarketPreference?.willing_to_relocate ?? false,
+      willing_fifo: loadedMarketPreference?.willing_fifo ?? false,
+      willing_dido: loadedMarketPreference?.willing_dido ?? false,
+      willing_commute: loadedMarketPreference?.willing_commute ?? false,
+      willing_international: loadedMarketPreference?.willing_international ?? false,
+      willing_temporary_assignment: loadedMarketPreference?.willing_temporary_assignment ?? false,
+      preferred_employment_types: loadedMarketPreference?.preferred_employment_types ?? [],
+      environment_ids: loadedMarketEnvironmentPreferences.map((item) => item.environment_id),
+      minimum_compensation: loadedMarketPreference?.minimum_compensation == null ? "" : String(loadedMarketPreference.minimum_compensation),
+      minimum_compensation_currency: loadedMarketPreference?.minimum_compensation_currency ?? loadedProfile?.preferred_currency ?? "AUD",
+      minimum_compensation_period: loadedMarketPreference?.minimum_compensation_period ?? "year",
+      compensation_visibility: loadedMarketPreference?.compensation_visibility ?? "compatibility_only",
+      roster_flexibility: loadedMarketPreference?.roster_preferences?.flexibility ?? "any",
+      preferred_roster_pattern: loadedMarketPreference?.roster_preferences?.preferred_pattern ?? "",
+    });
 
     const primaryNationality = loadedNationalities.find((item) => item.is_primary) ?? loadedNationalities[0];
 
@@ -1237,6 +1358,144 @@ export default function PassportEditor() {
     }
   }
 
+  function toggleMarketEmploymentType(value: string) {
+    setMarketForm((current) => ({
+      ...current,
+      preferred_employment_types: current.preferred_employment_types.includes(value)
+        ? current.preferred_employment_types.filter((item) => item !== value)
+        : [...current.preferred_employment_types, value],
+    }));
+  }
+
+  function toggleMarketEnvironment(id: number) {
+    setMarketForm((current) => ({
+      ...current,
+      environment_ids: current.environment_ids.includes(id)
+        ? current.environment_ids.filter((item) => item !== id)
+        : [...current.environment_ids, id],
+    }));
+  }
+
+  async function saveMarketPreferences(event: FormEvent) {
+    event.preventDefault();
+    if (!userId) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const minimumCompensation = marketForm.minimum_compensation.trim()
+        ? Number(marketForm.minimum_compensation)
+        : null;
+      if (minimumCompensation != null && (!Number.isFinite(minimumCompensation) || minimumCompensation < 0)) {
+        throw new Error("Enter a valid minimum compensation amount.");
+      }
+      const noticeDays = marketForm.notice_days.trim() ? Number(marketForm.notice_days) : null;
+      if (noticeDays != null && (!Number.isInteger(noticeDays) || noticeDays < 0)) {
+        throw new Error("Notice period must be a whole number of days.");
+      }
+      const currency = marketForm.minimum_compensation_currency.trim().toUpperCase().slice(0, 3);
+      if (minimumCompensation != null && currency.length !== 3) {
+        throw new Error("Enter a three-letter currency code for minimum compensation.");
+      }
+
+      const { error: preferenceError } = await supabase.from("worker_market_preferences").upsert({
+        worker_id: userId,
+        earliest_start_date: marketForm.earliest_start_date || null,
+        notice_days: noticeDays,
+        willing_to_relocate: marketForm.willing_to_relocate,
+        willing_fifo: marketForm.willing_fifo,
+        willing_dido: marketForm.willing_dido,
+        willing_commute: marketForm.willing_commute,
+        willing_international: marketForm.willing_international,
+        willing_temporary_assignment: marketForm.willing_temporary_assignment,
+        preferred_employment_types: marketForm.preferred_employment_types,
+        minimum_compensation: minimumCompensation,
+        minimum_compensation_currency: minimumCompensation == null ? null : currency,
+        minimum_compensation_period: marketForm.minimum_compensation_period,
+        compensation_visibility: marketForm.compensation_visibility,
+        roster_preferences: {
+          flexibility: marketForm.roster_flexibility,
+          preferred_pattern: marketForm.preferred_roster_pattern.trim() || undefined,
+        },
+      }, { onConflict: "worker_id" });
+      if (preferenceError) throw preferenceError;
+
+      const { error: clearEnvironmentError } = await supabase.from("worker_environment_preferences").delete().eq("worker_id", userId);
+      if (clearEnvironmentError) throw clearEnvironmentError;
+      if (marketForm.environment_ids.length) {
+        const { error: environmentError } = await supabase.from("worker_environment_preferences").insert(
+          marketForm.environment_ids.map((environmentId) => ({ worker_id: userId, environment_id: environmentId })),
+        );
+        if (environmentError) throw environmentError;
+      }
+
+      setNotice({ type: "success", text: "Market preferences saved." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save market preferences." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resetLocationPreferenceForm() {
+    setEditingLocationPreferenceId(null);
+    setLocationPreferenceForm({ country_code: "", city: "", preference: "preferred", relocation_mode: "any" });
+  }
+
+  function editLocationPreference(record: LocationPreference) {
+    setEditingLocationPreferenceId(record.id);
+    setLocationPreferenceForm({
+      country_code: record.country_code,
+      city: record.city ?? "",
+      preference: record.preference,
+      relocation_mode: record.relocation_mode ?? "any",
+    });
+  }
+
+  async function saveLocationPreference(event: FormEvent) {
+    event.preventDefault();
+    if (!userId || !locationPreferenceForm.country_code) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const payload = {
+        country_code: locationPreferenceForm.country_code,
+        city: locationPreferenceForm.city.trim() || null,
+        preference: locationPreferenceForm.preference,
+        relocation_mode: locationPreferenceForm.relocation_mode === "any" ? null : locationPreferenceForm.relocation_mode,
+      };
+      const result = editingLocationPreferenceId
+        ? await supabase.from("worker_location_preferences").update(payload).eq("id", editingLocationPreferenceId)
+        : await supabase.from("worker_location_preferences").insert({ worker_id: userId, ...payload });
+      if (result.error) throw result.error;
+      const wasEditing = Boolean(editingLocationPreferenceId);
+      resetLocationPreferenceForm();
+      setNotice({ type: "success", text: wasEditing ? "Location preference updated." : "Location preference added." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save location preference." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeLocationPreference(record: LocationPreference) {
+    if (!window.confirm("Remove this location preference?")) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await supabase.from("worker_location_preferences").delete().eq("id", record.id);
+      if (error) throw error;
+      if (editingLocationPreferenceId === record.id) resetLocationPreferenceForm();
+      setNotice({ type: "success", text: "Location preference removed." });
+      await loadData();
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove location preference." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -1392,6 +1651,7 @@ export default function PassportEditor() {
           ["employment", "Employment & Aircraft"],
           ["training", "Training & Competencies"],
           ["authorisations", "Company Authorisations"],
+          ["market", "Market Preferences"],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -1553,6 +1813,30 @@ export default function PassportEditor() {
                 {hasFullEuWorkRights ? <div className="rounded-xl bg-slate-50 p-3"><div className="flex items-center gap-2 font-semibold text-slate-900"><span aria-hidden="true">🇪🇺</span><span>European Union</span></div><div className="mt-1 text-sm text-slate-600">Work rights across all EU member states</div></div> : null}
                 {previewWorkRights.map((right) => <div key={right.id} className="rounded-xl bg-slate-50 p-3"><div className="font-semibold text-slate-900">{countryLabel(right.country_code)}</div><div className="mt-1 text-sm text-slate-600">{formatStatus(right.status)}</div></div>)}
               </div> : <p className="mt-2 text-sm text-slate-500">No work rights added.</p>}
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="font-semibold text-slate-950">Market preferences</h3>
+              {marketPreference ? (
+                <div className="mt-3 space-y-3 text-sm">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Availability</div>
+                    <div className="mt-1 font-semibold text-slate-900">{marketPreference.earliest_start_date ? `From ${formatDate(marketPreference.earliest_start_date)}` : marketPreference.notice_days != null ? `${marketPreference.notice_days} days notice` : "Not specified"}</div>
+                  </div>
+                  {[marketPreference.willing_to_relocate, marketPreference.willing_fifo, marketPreference.willing_dido, marketPreference.willing_commute, marketPreference.willing_international, marketPreference.willing_temporary_assignment].some(Boolean) ? (
+                    <div className="flex flex-wrap gap-2">
+                      {marketPreference.willing_to_relocate ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Relocation</span> : null}
+                      {marketPreference.willing_fifo ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">FIFO</span> : null}
+                      {marketPreference.willing_dido ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">DIDO</span> : null}
+                      {marketPreference.willing_commute ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Commute</span> : null}
+                      {marketPreference.willing_international ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">International</span> : null}
+                      {marketPreference.willing_temporary_assignment ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Temporary assignment</span> : null}
+                    </div>
+                  ) : null}
+                  {locationPreferences.filter((item) => item.preference !== "not_interested").length ? <div><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Locations</div><div className="mt-1 text-slate-700">{locationPreferences.filter((item) => item.preference !== "not_interested").slice(0, 4).map((item) => [item.city, countryLabel(item.country_code)].filter(Boolean).join(", ")).join(" · ")}{locationPreferences.filter((item) => item.preference !== "not_interested").length > 4 ? " · …" : ""}</div></div> : null}
+                  {marketPreference.minimum_compensation != null ? <div><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Compensation</div><div className="mt-1 text-slate-700">{marketPreference.compensation_visibility === "visible" ? `${marketPreference.minimum_compensation_currency ?? profile.preferred_currency} ${Number(marketPreference.minimum_compensation).toLocaleString()} / ${marketPreference.minimum_compensation_period}` : marketPreference.compensation_visibility === "compatibility_only" ? "Compatibility only — amount hidden" : "Private"}</div></div> : null}
+                </div>
+              ) : <p className="mt-2 text-sm text-slate-500">No market preferences saved.</p>}
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1948,6 +2232,99 @@ export default function PassportEditor() {
               return <div key={record.id} className="rounded-2xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-slate-950">{record.authorisation_name}</div><div className="mt-1 text-sm text-slate-600">{record.employer_name}</div>{[familyName, variantName, competencyName].filter(Boolean).length ? <div className="mt-1 text-xs text-slate-500">{[familyName, variantName, competencyName].filter(Boolean).join(" · ")}</div> : null}<div className="mt-1 text-xs text-slate-500">{record.issued_on ? `Issued ${formatDate(record.issued_on)}` : "Issue date not recorded"}{record.ended_on ? ` · Ended ${formatDate(record.ended_on)}` : record.expires_on ? ` · ${isExpired(record.expires_on) ? "Expired" : "Expires"} ${formatDate(record.expires_on)}` : current ? " · Current" : ""}</div></div><div className="flex items-center gap-2">{record.verification_status === "verified" && current ? <GreenShield /> : null}<EvidenceStatus status={record.verification_status} /></div></div><div className="mt-3 flex gap-2"><button type="button" disabled={busy} onClick={() => editAuthorisation(record)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Edit</button><button type="button" disabled={busy} onClick={() => void removeAuthorisation(record)} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700">Remove</button></div></div>;
             })}</div> : <p className="mt-4 text-sm text-slate-500">No company authorisations submitted yet.</p>}
           </section>
+        </div>
+      ) : null}
+
+      {tab === "market" && profile ? (
+        <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+          <form onSubmit={saveMarketPreferences} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Market Preferences</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Tell Aviation Passport what opportunities actually fit you. These facts drive two-way matching; they are not recruiter profile fluff.</p>
+
+            <div className="mt-7 border-t border-slate-100 pt-6">
+              <h3 className="font-semibold text-slate-950">Availability</h3>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Field label="Earliest start date" hint="Leave blank if availability is better represented by notice period"><input type="date" className="input" value={marketForm.earliest_start_date} onChange={(e) => setMarketForm({ ...marketForm, earliest_start_date: e.target.value })} /></Field>
+                <Field label="Notice period (days)"><input type="number" min="0" step="1" className="input" value={marketForm.notice_days} onChange={(e) => setMarketForm({ ...marketForm, notice_days: e.target.value })} placeholder="e.g. 28" /></Field>
+              </div>
+            </div>
+
+            <div className="mt-7 border-t border-slate-100 pt-6">
+              <h3 className="font-semibold text-slate-950">Mobility</h3>
+              <p className="mt-1 text-sm text-slate-500">Select every arrangement you would genuinely consider.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  ["willing_to_relocate", "Relocation"],
+                  ["willing_fifo", "FIFO"],
+                  ["willing_dido", "DIDO"],
+                  ["willing_commute", "Regular commute"],
+                  ["willing_international", "Permanent international role"],
+                  ["willing_temporary_assignment", "Temporary international assignment"],
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700">
+                    <input type="checkbox" checked={Boolean(marketForm[key as keyof typeof marketForm])} onChange={(e) => setMarketForm({ ...marketForm, [key]: e.target.checked })} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-7 border-t border-slate-100 pt-6">
+              <h3 className="font-semibold text-slate-950">Employment types</h3>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {EMPLOYMENT_TYPE_OPTIONS.map(([value, label]) => <label key={value} className={`cursor-pointer rounded-full border px-3.5 py-2 text-sm font-semibold ${marketForm.preferred_employment_types.includes(value) ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}><input type="checkbox" className="sr-only" checked={marketForm.preferred_employment_types.includes(value)} onChange={() => toggleMarketEmploymentType(value)} />{label}</label>)}
+              </div>
+            </div>
+
+            <div className="mt-7 border-t border-slate-100 pt-6">
+              <h3 className="font-semibold text-slate-950">Preferred environments</h3>
+              <p className="mt-1 text-sm text-slate-500">These are preferences, not claims about your experience.</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {sortedEnvironments.map((environment) => <label key={environment.id} className={`cursor-pointer rounded-xl border px-3 py-2.5 text-sm font-medium ${marketForm.environment_ids.includes(environment.id) ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 text-slate-700"}`}><input type="checkbox" className="sr-only" checked={marketForm.environment_ids.includes(environment.id)} onChange={() => toggleMarketEnvironment(environment.id)} />{environment.label}</label>)}
+              </div>
+            </div>
+
+            <div className="mt-7 border-t border-slate-100 pt-6">
+              <h3 className="font-semibold text-slate-950">Roster</h3>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Field label="Roster flexibility"><select className="input" value={marketForm.roster_flexibility} onChange={(e) => setMarketForm({ ...marketForm, roster_flexibility: e.target.value })}>{ROSTER_FLEXIBILITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+                <Field label="Preferred pattern (optional)" hint="Examples: 14/14, 5 on / 3 off"><input className="input" value={marketForm.preferred_roster_pattern} onChange={(e) => setMarketForm({ ...marketForm, preferred_roster_pattern: e.target.value })} placeholder="No preference" /></Field>
+              </div>
+            </div>
+
+            <div className="mt-7 border-t border-slate-100 pt-6">
+              <h3 className="font-semibold text-slate-950">Minimum compensation</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-500">Optional. By default employers only learn whether an opportunity is compatible — not your number.</p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-4">
+                <Field label="Amount"><input type="number" min="0" step="0.01" className="input" value={marketForm.minimum_compensation} onChange={(e) => setMarketForm({ ...marketForm, minimum_compensation: e.target.value })} /></Field>
+                <Field label="Currency"><input className="input uppercase" maxLength={3} value={marketForm.minimum_compensation_currency} onChange={(e) => setMarketForm({ ...marketForm, minimum_compensation_currency: e.target.value.toUpperCase() })} /></Field>
+                <Field label="Period"><select className="input" value={marketForm.minimum_compensation_period} onChange={(e) => setMarketForm({ ...marketForm, minimum_compensation_period: e.target.value as MarketPreference["minimum_compensation_period"] })}><option value="hour">Hour</option><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option><option value="year">Year</option><option value="one_off">One-off</option></select></Field>
+                <Field label="Employer visibility"><select className="input" value={marketForm.compensation_visibility} onChange={(e) => setMarketForm({ ...marketForm, compensation_visibility: e.target.value as MarketPreference["compensation_visibility"] })}><option value="compatibility_only">Compatibility only</option><option value="private">Private</option><option value="visible">Visible</option></select></Field>
+              </div>
+              <div className="mt-3 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">Compatibility only means an employer can see that its declared compensation meets your threshold, without seeing the threshold itself.</div>
+            </div>
+
+            <button disabled={busy} className="mt-7 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">Save market preferences</button>
+          </form>
+
+          <div className="space-y-6">
+            <form onSubmit={saveLocationPreference} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+              <h2 className="text-xl font-semibold tracking-tight text-slate-950">{editingLocationPreferenceId ? "Edit Location" : "Add Location"}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Add countries or cities you prefer, would consider, or deliberately exclude.</p>
+              <div className="mt-5 space-y-4">
+                <Field label="Country"><CountrySelect value={locationPreferenceForm.country_code} onChange={(value) => setLocationPreferenceForm({ ...locationPreferenceForm, country_code: value })} /></Field>
+                <Field label="City / region (optional)"><input className="input" value={locationPreferenceForm.city} onChange={(e) => setLocationPreferenceForm({ ...locationPreferenceForm, city: e.target.value })} placeholder="e.g. Brisbane" /></Field>
+                <Field label="Interest"><select className="input" value={locationPreferenceForm.preference} onChange={(e) => setLocationPreferenceForm({ ...locationPreferenceForm, preference: e.target.value as LocationPreference["preference"] })}><option value="preferred">Preferred</option><option value="acceptable">Acceptable</option><option value="exceptional_only">Exceptional opportunity only</option><option value="not_interested">Not interested</option></select></Field>
+                <Field label="How you would work there"><select className="input" value={locationPreferenceForm.relocation_mode} onChange={(e) => setLocationPreferenceForm({ ...locationPreferenceForm, relocation_mode: e.target.value })}>{LOCATION_MODE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+              </div>
+              <div className="mt-5 flex gap-3"><button disabled={busy || !locationPreferenceForm.country_code} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{editingLocationPreferenceId ? "Save location" : "Add location"}</button>{editingLocationPreferenceId ? <button type="button" disabled={busy} onClick={resetLocationPreferenceForm} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700">Cancel</button> : null}</div>
+            </form>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+              <h3 className="font-semibold text-slate-950">Location preferences</h3>
+              {locationPreferences.length ? <div className="mt-4 space-y-3">{locationPreferences.map((record) => <div key={record.id} className="rounded-2xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-slate-950">{[record.city, countryLabel(record.country_code)].filter(Boolean).join(", ")}</div><div className="mt-1 text-sm text-slate-600">{formatStatus(record.preference)}{record.relocation_mode ? ` · ${record.relocation_mode === "temporary_assignment" ? "Temporary assignment" : record.relocation_mode.toUpperCase()}` : " · Any arrangement"}</div></div></div><div className="mt-3 flex gap-2"><button type="button" disabled={busy} onClick={() => editLocationPreference(record)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Edit</button><button type="button" disabled={busy} onClick={() => void removeLocationPreference(record)} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700">Remove</button></div></div>)}</div> : <p className="mt-3 text-sm text-slate-500">No location preferences added yet.</p>}
+            </section>
+          </div>
         </div>
       ) : null}
     </div>
