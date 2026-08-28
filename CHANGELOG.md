@@ -1,5 +1,18 @@
 # Changelog
 
+## V0.9.2 — Clear Demand Intelligence + Salary Impact
+- Replaced the Supply Funnel UI with a straightforward Market Snapshot
+- Demand Intelligence now shows Mandatory-qualified, receptive, Talent Match, location-compatible and salary-compatible supply clearly
+- Added a compensation scenario tool so HR can test a different salary range without changing the live demand
+- Added Apply to demand after testing a salary scenario
+- Private candidate minimum compensation remains hidden; only compatibility is evaluated
+- Talent Matches no longer silently disappear just because positive mobility preferences were not filled in
+- Only an explicit Not Interested location preference blocks a receptive worker on location grounds
+- Compensation below a worker minimum is now shown as a compatibility gap rather than silently removing an otherwise qualified worker
+- Added Location Check and Compensation Gap match states
+- Renamed Requirements & Market workspace tab to Demand Intelligence
+- Added aggregate diagnostics for location, salary and verified Mandatory compatibility
+
 ## V0.9.1 — Visibility Simplification + Anonymous Matches
 - Simplified worker profile visibility to Private, Anonymous Market and Public
 - Removed Aviation Network from the worker-facing UI

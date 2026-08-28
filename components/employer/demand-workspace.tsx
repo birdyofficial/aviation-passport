@@ -129,7 +129,7 @@ export default function DemandWorkspace({ demandId }: { demandId: string }) {
           onClick={() => setTab("requirements")}
           className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${tab === "requirements" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}
         >
-          Requirements & Market
+          Demand Intelligence
         </button>
         <button
           type="button"

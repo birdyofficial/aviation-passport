@@ -37,9 +37,33 @@ type CompetencyRequirement = {
 type TrainingRequirement = {
   id: string; demand_id: string; training_name: string; requirement_level: RequirementLevel; must_be_current: boolean; notes: string | null;
 };
-type FunnelStage = {
-  stage_order: number; stage_key: string; stage_label: string;
-  structured_count: number; receptive_count: number; verified_count: number;
+type MoneyPeriod = "hour" | "day" | "week" | "month" | "year" | "one_off";
+type CompensationComponent = {
+  id: string;
+  demand_id: string;
+  component_type: string;
+  amount_min: number | null;
+  amount_max: number | null;
+  currency_code: string;
+  period: MoneyPeriod;
+};
+type MarketSnapshot = {
+  market_passports: number;
+  mandatory_match: number;
+  receptive_match: number;
+  talent_matches: number;
+  location_compatible: number;
+  salary_compatible: number;
+  ready_now: number;
+  identified_matches: number;
+  anonymous_matches: number;
+  verified_mandatory: number;
+  compensation_below_minimum: number;
+  compensation_needs_comparison: number;
+  effective_amount_min: number | null;
+  effective_amount_max: number | null;
+  effective_currency_code: string | null;
+  effective_period: MoneyPeriod | null;
 };
 
 type Props = {
@@ -76,6 +100,14 @@ const ENVIRONMENT_ORDER = [
 const TRAINING_OPTIONS = [
   "Human Factors", "EWIS", "Fuel Tank Safety", "Dangerous Goods", "Safety Management System (SMS)",
   "Continuation Training", "ETOPS", "RVSM", "Airside / Airport Safety", "First Aid",
+];
+
+const MONEY_PERIODS: [MoneyPeriod, string][] = [
+  ["hour", "per hour"],
+  ["day", "per day"],
+  ["week", "per week"],
+  ["month", "per month"],
+  ["year", "per year"],
 ];
 
 function levelClass(level: RequirementLevel) {
@@ -120,7 +152,15 @@ export default function DemandRequirements({
   const [licenceRequirements, setLicenceRequirements] = useState<LicenceRequirement[]>([]);
   const [competencyRequirements, setCompetencyRequirements] = useState<CompetencyRequirement[]>([]);
   const [trainingRequirements, setTrainingRequirements] = useState<TrainingRequirement[]>([]);
-  const [funnel, setFunnel] = useState<FunnelStage[]>([]);
+  const [baseCompensation, setBaseCompensation] = useState<CompensationComponent | null>(null);
+  const [marketSnapshot, setMarketSnapshot] = useState<MarketSnapshot | null>(null);
+  const [salarySnapshot, setSalarySnapshot] = useState<MarketSnapshot | null>(null);
+  const [salaryForm, setSalaryForm] = useState({
+    amount_min: "",
+    amount_max: "",
+    currency_code: "AUD",
+    period: "year" as MoneyPeriod,
+  });
 
   const [environmentForm, setEnvironmentForm] = useState({ environment_id: "", requirement_level: "mandatory" as RequirementLevel });
   const [editingAircraftId, setEditingAircraftId] = useState<string | null>(null);
@@ -178,8 +218,6 @@ export default function DemandRequirements({
     return engines.filter((item) => ids.has(item.id));
   }, [engines, variantEngines, aircraftForm.aircraft_variant_id]);
 
-  const finalStage = funnel.at(-1);
-  const baseStage = funnel[0];
   const mandatoryCount = [
     ...environmentRequirements.filter((r) => r.requirement_level === "mandatory"),
     ...licenceRequirements.filter((r) => r.requirement_level === "mandatory"),
@@ -191,7 +229,7 @@ export default function DemandRequirements({
     setLoading(true); setNotice(null);
     try {
       const [envRef, manufacturerRef, familyRef, variantRef, engineRef, variantEngineRef, authorityRef, competencyRef,
-        envReq, aircraftReq, licenceReq, competencyReq, trainingReq] = await Promise.all([
+        envReq, aircraftReq, licenceReq, competencyReq, trainingReq, compensationReq] = await Promise.all([
         supabase.from("environments").select("*"),
         supabase.from("aircraft_manufacturers").select("*").order("name"),
         supabase.from("aircraft_families").select("*").order("display_name"),
@@ -205,8 +243,9 @@ export default function DemandRequirements({
         supabase.from("demand_licence_requirements").select("*").eq("demand_id", demandId).order("id"),
         supabase.from("demand_competency_requirements").select("*").eq("demand_id", demandId).order("id"),
         supabase.from("demand_training_requirements").select("*").eq("demand_id", demandId).order("id"),
+        supabase.from("demand_compensation_components").select("*").eq("demand_id", demandId).eq("component_type", "base_salary").limit(1),
       ]);
-      const firstError = [envRef, manufacturerRef, familyRef, variantRef, engineRef, variantEngineRef, authorityRef, competencyRef, envReq, aircraftReq, licenceReq, competencyReq, trainingReq].find((r) => r.error)?.error;
+      const firstError = [envRef, manufacturerRef, familyRef, variantRef, engineRef, variantEngineRef, authorityRef, competencyRef, envReq, aircraftReq, licenceReq, competencyReq, trainingReq, compensationReq].find((r) => r.error)?.error;
       if (firstError) throw firstError;
       setEnvironments((envRef.data ?? []) as Environment[]); setManufacturers((manufacturerRef.data ?? []) as Manufacturer[]);
       setFamilies((familyRef.data ?? []) as AircraftFamily[]); setVariants((variantRef.data ?? []) as AircraftVariant[]);
@@ -215,16 +254,141 @@ export default function DemandRequirements({
       setEnvironmentRequirements((envReq.data ?? []) as DemandEnvironment[]); setAircraftRequirements((aircraftReq.data ?? []) as AircraftRequirement[]);
       setLicenceRequirements((licenceReq.data ?? []) as LicenceRequirement[]); setCompetencyRequirements((competencyReq.data ?? []) as CompetencyRequirement[]);
       setTrainingRequirements((trainingReq.data ?? []) as TrainingRequirement[]);
-      await loadFunnel();
+      const loadedBaseComp = ((compensationReq.data ?? [])[0] ?? null) as CompensationComponent | null;
+      setBaseCompensation(loadedBaseComp);
+      setSalaryForm({
+        amount_min: loadedBaseComp?.amount_min == null ? "" : String(loadedBaseComp.amount_min),
+        amount_max: loadedBaseComp?.amount_max == null ? "" : String(loadedBaseComp.amount_max),
+        currency_code: loadedBaseComp?.currency_code ?? "AUD",
+        period: loadedBaseComp?.period ?? "year",
+      });
+      await loadMarketSnapshot();
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not load demand requirements." });
     } finally { setLoading(false); }
   }
 
-  async function loadFunnel() {
-    const { data, error } = await supabase.rpc("get_demand_supply_funnel", { p_demand_id: demandId });
+  async function loadMarketSnapshot(override?: {
+    amount_min: number | null;
+    amount_max: number | null;
+    currency_code: string;
+    period: MoneyPeriod;
+  }) {
+    const args: Record<string, string | number | null> = { p_demand_id: demandId };
+    if (override) {
+      args.p_amount_min = override.amount_min;
+      args.p_amount_max = override.amount_max;
+      args.p_currency_code = override.currency_code;
+      args.p_period = override.period;
+    }
+    const { data, error } = await supabase.rpc("get_demand_market_snapshot", args);
     if (error) throw error;
-    setFunnel((data ?? []).map((row: FunnelStage) => ({ ...row, structured_count: Number(row.structured_count), receptive_count: Number(row.receptive_count), verified_count: Number(row.verified_count) })));
+    const row = (data ?? [])[0] as MarketSnapshot | undefined;
+    if (!row) {
+      setMarketSnapshot(null);
+      if (override) setSalarySnapshot(null);
+      return null;
+    }
+    const normalized: MarketSnapshot = {
+      ...row,
+      market_passports: Number(row.market_passports ?? 0),
+      mandatory_match: Number(row.mandatory_match ?? 0),
+      receptive_match: Number(row.receptive_match ?? 0),
+      talent_matches: Number(row.talent_matches ?? 0),
+      location_compatible: Number(row.location_compatible ?? 0),
+      salary_compatible: Number(row.salary_compatible ?? 0),
+      ready_now: Number(row.ready_now ?? 0),
+      identified_matches: Number(row.identified_matches ?? 0),
+      anonymous_matches: Number(row.anonymous_matches ?? 0),
+      verified_mandatory: Number(row.verified_mandatory ?? 0),
+      compensation_below_minimum: Number(row.compensation_below_minimum ?? 0),
+      compensation_needs_comparison: Number(row.compensation_needs_comparison ?? 0),
+      effective_amount_min: row.effective_amount_min == null ? null : Number(row.effective_amount_min),
+      effective_amount_max: row.effective_amount_max == null ? null : Number(row.effective_amount_max),
+    };
+    if (override) setSalarySnapshot(normalized);
+    else {
+      setMarketSnapshot(normalized);
+      setSalarySnapshot(normalized);
+    }
+    return normalized;
+  }
+
+  function parseSalaryScenario() {
+    const amountMin = salaryForm.amount_min.trim() ? Number(salaryForm.amount_min) : null;
+    const amountMax = salaryForm.amount_max.trim() ? Number(salaryForm.amount_max) : null;
+    if (amountMin != null && (!Number.isFinite(amountMin) || amountMin < 0)) throw new Error("Salary minimum must be a valid positive amount.");
+    if (amountMax != null && (!Number.isFinite(amountMax) || amountMax < 0)) throw new Error("Salary maximum must be a valid positive amount.");
+    if (amountMin != null && amountMax != null && amountMax < amountMin) throw new Error("Salary maximum cannot be lower than salary minimum.");
+    return {
+      amount_min: amountMin,
+      amount_max: amountMax,
+      currency_code: salaryForm.currency_code.trim().toUpperCase().slice(0, 3),
+      period: salaryForm.period,
+    };
+  }
+
+  async function testSalaryScenario() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const scenario = parseSalaryScenario();
+      await loadMarketSnapshot(scenario);
+      setNotice({ type: "success", text: "Salary scenario recalculated. The live demand has not been changed." });
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not test salary scenario." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applySalaryScenario() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const scenario = parseSalaryScenario();
+      if (scenario.amount_min == null || scenario.amount_max == null) {
+        throw new Error("An Open Demand needs both a minimum and maximum base compensation.");
+      }
+      if (baseCompensation) {
+        const { error } = await supabase
+          .from("demand_compensation_components")
+          .update({
+            amount_min: scenario.amount_min,
+            amount_max: scenario.amount_max,
+            currency_code: scenario.currency_code,
+            period: scenario.period,
+          })
+          .eq("id", baseCompensation.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("demand_compensation_components").insert({
+          demand_id: demandId,
+          component_type: "base_salary",
+          amount_min: scenario.amount_min,
+          amount_max: scenario.amount_max,
+          currency_code: scenario.currency_code,
+          period: scenario.period,
+        });
+        if (error) throw error;
+      }
+      await loadAll();
+      setNotice({ type: "success", text: "Demand compensation updated and market intelligence recalculated." });
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not update demand compensation." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resetSalaryScenario() {
+    setSalaryForm({
+      amount_min: baseCompensation?.amount_min == null ? "" : String(baseCompensation.amount_min),
+      amount_max: baseCompensation?.amount_max == null ? "" : String(baseCompensation.amount_max),
+      currency_code: baseCompensation?.currency_code ?? "AUD",
+      period: baseCompensation?.period ?? "year",
+    });
+    setSalarySnapshot(marketSnapshot);
   }
 
   async function refresh(message: string) {
@@ -265,7 +429,7 @@ export default function DemandRequirements({
       if (months != null && (!Number.isInteger(months) || months < 0)) throw new Error("Aircraft recency must be a whole number of months.");
       const payload = { demand_id: demandId, aircraft_family_id: aircraftForm.aircraft_family_id && aircraftForm.aircraft_family_id !== "__custom__" ? aircraftForm.aircraft_family_id : null, custom_aircraft_family: custom || null, aircraft_variant_id: aircraftForm.aircraft_family_id === "__custom__" ? null : aircraftForm.aircraft_variant_id || null, engine_id: aircraftForm.aircraft_family_id === "__custom__" ? null : aircraftForm.engine_id || null, experience_requirement: aircraftForm.experience_requirement, rating_requirement: aircraftForm.rating_requirement, authorisation_requirement: aircraftForm.authorisation_requirement, minimum_exposure: aircraftForm.minimum_exposure || null, max_months_since_exposure: months };
       const result = editingAircraftId ? await supabase.from("demand_aircraft_requirements").update(payload).eq("id", editingAircraftId) : await supabase.from("demand_aircraft_requirements").insert(payload);
-      if (result.error) throw result.error; resetAircraft(); await refresh("Aircraft requirement saved. Supply funnel recalculated.");
+      if (result.error) throw result.error; resetAircraft(); await refresh("Aircraft requirement saved. Market intelligence recalculated.");
     } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save aircraft requirement." }); } finally { setBusy(false); }
   }
   async function removeAircraft(r: AircraftRequirement) { if (!window.confirm("Remove this aircraft requirement?")) return; setBusy(true); try { const { error } = await supabase.from("demand_aircraft_requirements").delete().eq("id", r.id); if (error) throw error; if (editingAircraftId === r.id) resetAircraft(); await refresh("Aircraft requirement removed."); } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove aircraft requirement." }); } finally { setBusy(false); } }
@@ -281,7 +445,7 @@ export default function DemandRequirements({
       if (!system && !licenceForm.conversion_accepted) throw new Error("Select a licence system, or explicitly allow conversion.");
       const payload = { demand_id: demandId, authority_id: selectedAuthority?.id ?? null, issuing_country_code: licenceForm.issuing_country_code || selectedAuthority?.country_code || null, issuing_authority_name: selectedAuthority?.name ?? (licenceForm.custom_authority_name.trim() || null), licence_scheme: system || null, category_privileges: licenceForm.category_privileges.trim() || null, requirement_level: licenceForm.requirement_level, conversion_accepted: licenceForm.conversion_accepted };
       const result = editingLicenceId ? await supabase.from("demand_licence_requirements").update(payload).eq("id", editingLicenceId) : await supabase.from("demand_licence_requirements").insert(payload);
-      if (result.error) throw result.error; resetLicence(); await refresh("Licence requirement saved. Supply funnel recalculated.");
+      if (result.error) throw result.error; resetLicence(); await refresh("Licence requirement saved. Market intelligence recalculated.");
     } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save licence requirement." }); } finally { setBusy(false); }
   }
   async function removeLicence(r: LicenceRequirement) { if (!window.confirm("Remove this licence requirement?")) return; setBusy(true); try { const { error } = await supabase.from("demand_licence_requirements").delete().eq("id", r.id); if (error) throw error; if (editingLicenceId === r.id) resetLicence(); await refresh("Licence requirement removed."); } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove licence requirement." }); } finally { setBusy(false); } }
@@ -297,7 +461,7 @@ export default function DemandRequirements({
       if (months != null && (!Number.isInteger(months) || months < 0)) throw new Error("Competency recency must be a whole number of months.");
       const payload = { demand_id: demandId, competency_id: selected?.id ?? null, custom_competency_name: custom || null, aircraft_family_id: competencyForm.aircraft_family_id || null, requirement_level: competencyForm.requirement_level, must_be_current: months != null, max_months_since_use: months };
       const result = editingCompetencyId ? await supabase.from("demand_competency_requirements").update(payload).eq("id", editingCompetencyId) : await supabase.from("demand_competency_requirements").insert(payload);
-      if (result.error) throw result.error; resetCompetency(); await refresh("Competency requirement saved. Supply funnel recalculated.");
+      if (result.error) throw result.error; resetCompetency(); await refresh("Competency requirement saved. Market intelligence recalculated.");
     } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save competency requirement." }); } finally { setBusy(false); }
   }
   async function removeCompetency(r: CompetencyRequirement) { if (!window.confirm("Remove this competency requirement?")) return; setBusy(true); try { const { error } = await supabase.from("demand_competency_requirements").delete().eq("id", r.id); if (error) throw error; if (editingCompetencyId === r.id) resetCompetency(); await refresh("Competency requirement removed."); } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove competency requirement." }); } finally { setBusy(false); } }
@@ -306,7 +470,7 @@ export default function DemandRequirements({
   function editTraining(r: TrainingRequirement) { const known = TRAINING_OPTIONS.includes(r.training_name); setEditingTrainingId(r.id); setTrainingForm({ training_key: known ? r.training_name : "__custom__", custom_training_name: known ? "" : r.training_name, requirement_level: r.requirement_level, must_be_current: r.must_be_current }); }
   async function saveTraining(event: FormEvent) {
     event.preventDefault(); setBusy(true); setNotice(null);
-    try { const name = trainingForm.training_key === "__custom__" ? trainingForm.custom_training_name.trim() : trainingForm.training_key; if (!name) throw new Error("Select or enter a training requirement."); const payload = { demand_id: demandId, training_name: name, requirement_level: trainingForm.requirement_level, must_be_current: trainingForm.must_be_current }; const result = editingTrainingId ? await supabase.from("demand_training_requirements").update(payload).eq("id", editingTrainingId) : await supabase.from("demand_training_requirements").insert(payload); if (result.error) throw result.error; resetTraining(); await refresh("Training requirement saved. Supply funnel recalculated."); }
+    try { const name = trainingForm.training_key === "__custom__" ? trainingForm.custom_training_name.trim() : trainingForm.training_key; if (!name) throw new Error("Select or enter a training requirement."); const payload = { demand_id: demandId, training_name: name, requirement_level: trainingForm.requirement_level, must_be_current: trainingForm.must_be_current }; const result = editingTrainingId ? await supabase.from("demand_training_requirements").update(payload).eq("id", editingTrainingId) : await supabase.from("demand_training_requirements").insert(payload); if (result.error) throw result.error; resetTraining(); await refresh("Training requirement saved. Market intelligence recalculated."); }
     catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not save training requirement." }); } finally { setBusy(false); }
   }
   async function removeTraining(r: TrainingRequirement) { if (!window.confirm("Remove this training requirement?")) return; setBusy(true); try { const { error } = await supabase.from("demand_training_requirements").delete().eq("id", r.id); if (error) throw error; if (editingTrainingId === r.id) resetTraining(); await refresh("Training requirement removed."); } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not remove training requirement." }); } finally { setBusy(false); } }
@@ -328,26 +492,110 @@ export default function DemandRequirements({
 
       {!builderMode ? (
         <>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Market Passports" value={String(baseStage?.structured_count ?? 0)} note="Non-private structured Passports" />
-        <Metric label="Mandatory match" value={String(finalStage?.structured_count ?? 0)} note={`${mandatoryCount} hard requirement${mandatoryCount === 1 ? "" : "s"}`} />
-        <Metric label="Receptive match" value={String(finalStage?.receptive_count ?? 0)} note="Open to opportunities" />
-        <Metric label="Verified match" value={String(finalStage?.verified_count ?? 0)} note="Trust-backed hard requirements" />
-      </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric label="Talent matches" value={String(marketSnapshot?.talent_matches ?? 0)} note="Qualified, receptive and employer-visible" />
+            <Metric label="Ready at current package" value={String(marketSnapshot?.ready_now ?? 0)} note="Location + compensation compatible" />
+            <Metric label="Anonymous matches" value={String(marketSnapshot?.anonymous_matches ?? 0)} note="Identity protected until worker reveals" />
+            <Metric label="Verified mandatory" value={String(marketSnapshot?.verified_mandatory ?? 0)} note="Hard requirements trust-backed" />
+          </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6">
-          <div className="flex items-start justify-between gap-4"><div><h3 className="text-xl font-semibold text-slate-950">Supply funnel</h3><p className="mt-1 text-sm text-slate-500">Watch hard requirements narrow the labour pool.</p></div><button type="button" disabled={busy} onClick={() => void loadFunnel().catch((error) => setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not refresh intelligence." }))} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Refresh</button></div>
-          <div className="mt-5 space-y-2">{funnel.map((stage, index) => { const previous = index ? funnel[index - 1].structured_count : stage.structured_count; const loss = Math.max(0, previous - stage.structured_count); return <div key={stage.stage_key} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3"><div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-slate-800">{stage.stage_label}</span><span className="text-lg font-semibold text-slate-950">{stage.structured_count}</span></div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{stage.receptive_count} receptive</span><span>{stage.verified_count} verified</span>{loss ? <span className="text-rose-600">−{loss} at this stage</span> : null}</div></div>; })}</div>
-          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800"><strong>Structured</strong> includes submitted facts that are not rejected or expired. <strong>Verified</strong> uses only verification/employer-confirmed facts. No individual worker records are exposed here.</div>
-        </div>
+          <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-950">Market snapshot</h3>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">A simple view of the people this demand can realistically reach.</p>
+                </div>
+                <button type="button" disabled={busy} onClick={() => void loadMarketSnapshot().catch((error) => setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not refresh intelligence." }))} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Refresh</button>
+              </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6">
-          <h3 className="text-xl font-semibold text-slate-950">Automatic eligibility</h3>
-          <div className="mt-4 rounded-2xl border border-slate-200 p-4"><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Work rights</div><div className="mt-1 font-semibold text-slate-900">{countryCode ? countryLabel(countryCode) : "No demand country selected"}</div><p className="mt-2 text-sm leading-6 text-slate-600">{!countryCode ? "Set the demand country to activate work-right eligibility." : sponsorshipAvailable ? "Sponsorship is available, so existing local work rights do not hard-filter the pool." : "Without sponsorship, a worker needs a valid citizen, permanent-resident, unrestricted or temporary work right for this country."}</p></div>
-          <div className="mt-4 rounded-2xl border border-slate-200 p-4"><div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Requirement behaviour</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{LEVELS.map(([value,label]) => <div key={value} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${levelClass(value)}`}>{label}{value === "mandatory" ? " · hard filter" : value === "trainable" ? " · gap employer accepts" : value === "preferred" ? " · ranking signal" : " · ignored"}</div>)}</div></div>
-        </div>
-      </div>
+              <div className="mt-5 space-y-3">
+                <SnapshotRow label="Meets all Mandatory requirements" value={marketSnapshot?.mandatory_match ?? 0} />
+                <SnapshotRow label="Open to this type of opportunity" value={marketSnapshot?.receptive_match ?? 0} />
+                <SnapshotRow label="Appears in Talent Matches" value={marketSnapshot?.talent_matches ?? 0} />
+                <SnapshotRow label="Location compatible now" value={marketSnapshot?.location_compatible ?? 0} />
+                <SnapshotRow label="Compatible with current pay range" value={marketSnapshot?.salary_compatible ?? 0} />
+                <SnapshotRow label="Ready at current location + package" value={marketSnapshot?.ready_now ?? 0} strong />
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+                <strong>{mandatoryCount} Mandatory requirement{mandatoryCount === 1 ? "" : "s"}</strong> currently define technical eligibility.
+                Workers are no longer silently removed because they have not filled in a mobility preference; only an explicit <strong>Not interested</strong> location preference blocks the opportunity.
+              </div>
+
+              {(marketSnapshot?.compensation_below_minimum ?? 0) > 0 || (marketSnapshot?.compensation_needs_comparison ?? 0) > 0 ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {(marketSnapshot?.compensation_below_minimum ?? 0) > 0 ? <MiniFact label="Below worker minimum" value={String(marketSnapshot?.compensation_below_minimum ?? 0)} /> : null}
+                  {(marketSnapshot?.compensation_needs_comparison ?? 0) > 0 ? <MiniFact label="Currency / period comparison needed" value={String(marketSnapshot?.compensation_needs_comparison ?? 0)} /> : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-6">
+              <div>
+                <h3 className="text-xl font-semibold text-slate-950">Compensation impact</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  Test a different salary range and immediately see how many compatible workers it could reach. Testing does not alter the live demand.
+                </p>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <Field label="Minimum">
+                  <input type="number" min="0" step="0.01" className="input" value={salaryForm.amount_min} onChange={(e) => setSalaryForm({ ...salaryForm, amount_min: e.target.value })} />
+                </Field>
+                <Field label="Maximum">
+                  <input type="number" min="0" step="0.01" className="input" value={salaryForm.amount_max} onChange={(e) => setSalaryForm({ ...salaryForm, amount_max: e.target.value })} />
+                </Field>
+                <Field label="Currency">
+                  <input className="input uppercase" maxLength={3} value={salaryForm.currency_code} onChange={(e) => setSalaryForm({ ...salaryForm, currency_code: e.target.value.toUpperCase() })} />
+                </Field>
+                <Field label="Period">
+                  <select className="input" value={salaryForm.period} onChange={(e) => setSalaryForm({ ...salaryForm, period: e.target.value as MoneyPeriod })}>
+                    {MONEY_PERIODS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </Field>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" disabled={busy} onClick={() => void testSalaryScenario()} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Test salary range</button>
+                <button type="button" disabled={busy} onClick={resetSalaryScenario} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">Reset</button>
+                <button type="button" disabled={busy} onClick={() => void applySalaryScenario()} className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 disabled:opacity-50">Apply to demand</button>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+                <div className="text-xs font-bold uppercase tracking-[0.1em] text-blue-500">Salary scenario</div>
+                <div className="mt-2 flex flex-wrap items-end gap-x-8 gap-y-4">
+                  <div>
+                    <div className="text-3xl font-semibold tracking-tight text-slate-950">{salarySnapshot?.salary_compatible ?? 0}</div>
+                    <div className="mt-1 text-sm text-slate-600">salary-compatible Talent Matches</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-semibold tracking-tight text-slate-950">{salarySnapshot?.ready_now ?? 0}</div>
+                    <div className="mt-1 text-sm text-slate-600">ready at location + package</div>
+                  </div>
+                </div>
+                {marketSnapshot && salarySnapshot ? (
+                  <div className="mt-4 text-sm font-medium text-blue-900">
+                    {salarySnapshot.salary_compatible === marketSnapshot.salary_compatible
+                      ? "This range reaches the same known salary-compatible supply as the current demand."
+                      : salarySnapshot.salary_compatible > marketSnapshot.salary_compatible
+                        ? `This range adds ${salarySnapshot.salary_compatible - marketSnapshot.salary_compatible} salary-compatible worker${salarySnapshot.salary_compatible - marketSnapshot.salary_compatible === 1 ? "" : "s"}.`
+                        : `This range removes ${marketSnapshot.salary_compatible - salarySnapshot.salary_compatible} salary-compatible worker${marketSnapshot.salary_compatible - salarySnapshot.salary_compatible === 1 ? "" : "s"}.`}
+                  </div>
+                ) : null}
+                <p className="mt-3 text-xs leading-5 text-blue-800">
+                  Private minimum compensation is never displayed here. Aviation Passport only evaluates compatibility against the tested range.
+                </p>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-slate-200 p-4">
+                <div className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Requirement behaviour</div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {LEVELS.map(([value,label]) => <div key={value} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${levelClass(value)}`}>{label}{value === "mandatory" ? " · hard filter" : value === "trainable" ? " · gap employer accepts" : value === "preferred" ? " · ranking signal" : " · ignored"}</div>)}
+                </div>
+              </div>
+            </div>
+          </div>
 
         </>
       ) : (
@@ -409,6 +657,24 @@ function RequirementPanel({ title, description, children }: { title: string; des
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="block"><span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>{children}</label>; }
 function LevelSelect({ value, onChange }: { value: RequirementLevel; onChange: (value: RequirementLevel) => void }) { return <select className="input" value={value} onChange={(e) => onChange(e.target.value as RequirementLevel)}>{LEVELS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>; }
 function CountrySelect({ value, onChange }: { value: string; onChange: (value: string) => void }) { return <select className="input" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Any / not specified</option>{COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}</select>; }
+function SnapshotRow({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between gap-4 rounded-xl border px-4 py-3 ${strong ? "border-emerald-200 bg-emerald-50" : "border-slate-100 bg-slate-50"}`}>
+      <span className={`text-sm ${strong ? "font-semibold text-emerald-800" : "font-medium text-slate-700"}`}>{label}</span>
+      <span className={`text-xl font-semibold ${strong ? "text-emerald-800" : "text-slate-950"}`}>{value}</span>
+    </div>
+  );
+}
+
+function MiniFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">
+      <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-600">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-amber-900">{value}</div>
+    </div>
+  );
+}
+
 function Metric({ label, value, note }: { label: string; value: string; note: string }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-sm text-slate-500">{label}</div><div className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">{value}</div><div className="mt-1 text-xs text-slate-500">{note}</div></div>; }
 function Pill({ label, level }: { label: string; level: RequirementLevel }) { return <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${levelClass(level)}`}>{label}</span>; }
 function RemoveButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) { return <button type="button" disabled={disabled} onClick={onClick} className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-700">Remove</button>; }

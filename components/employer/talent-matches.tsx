@@ -22,10 +22,12 @@ type TalentMatch = {
   trust_label: string;
   work_right_label: string;
   location_label: string;
+  location_compatible: boolean;
   earliest_start_date: string | null;
   notice_value: number | null;
   notice_unit: string | null;
   compensation_label: string;
+  compensation_compatible: boolean | null;
   visible_minimum_compensation: number | null;
   visible_minimum_currency: string | null;
   visible_minimum_period: MoneyPeriod | null;
@@ -53,6 +55,8 @@ function matchClasses(label: string) {
   if (label === "Strong Match") return "border-blue-200 bg-blue-50 text-blue-700";
   if (label === "Trainable Match") return "border-violet-200 bg-violet-50 text-violet-700";
   if (label === "Mobility Match") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (label === "Location Check") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (label === "Compensation Gap") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
@@ -137,7 +141,7 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
           <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Demand-bound talent access</div>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Talent Matches</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            These are receptive workers whose structured Passport satisfies every Mandatory requirement and whose market preferences do not rule this opportunity out.
+            These are receptive workers whose structured Passport satisfies every Mandatory requirement. Location and compensation compatibility are shown clearly instead of silently removing an otherwise relevant person.
           </p>
         </div>
         <button type="button" disabled={loading} onClick={() => void loadMatches()} className="self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
@@ -149,7 +153,7 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
         <Metric label="Talent matches" value={String(matches.length)} />
         <Metric label="Identified" value={String(matches.filter((item) => !item.is_anonymous).length)} />
         <Metric label="Anonymous" value={String(matches.filter((item) => item.is_anonymous).length)} />
-        <Metric label="Verified mandatory" value={String(matches.filter((item) => item.verified_match).length)} />
+        <Metric label="Ready now" value={String(matches.filter((item) => item.location_compatible && item.compensation_compatible !== false).length)} />
       </div>
 
       <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
@@ -186,9 +190,9 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <Fact label="Work rights" value={match.work_right_label} />
-                  <Fact label="Location" value={match.location_label} />
+                  <Fact label="Location" value={match.location_label} status={match.location_compatible ? "ok" : "check"} />
                   <Fact label="Availability" value={formatAvailability(match)} />
-                  <Fact label="Compensation" value={visibleMinimum ? `${match.compensation_label} · ${visibleMinimum}` : match.compensation_label} />
+                  <Fact label="Compensation" value={visibleMinimum ? `${match.compensation_label} · ${visibleMinimum}` : match.compensation_label} status={match.compensation_compatible === false ? "gap" : match.compensation_compatible === true ? "ok" : "check"} />
                 </div>
 
                 {match.trainable_gaps.length || match.preferred_gaps.length ? (
@@ -221,7 +225,7 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 p-8 text-center">
           <div className="font-semibold text-slate-900">No talent matches yet</div>
           <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            A worker must be receptive, meet every Mandatory requirement and be compatible with the opportunity. Public and Anonymous Market profiles can appear here; Private profiles cannot.
+            A worker must be receptive and meet every Mandatory requirement. Public and Anonymous Market profiles can appear here; Private profiles cannot. Explicit “Not interested” location preferences are respected.
           </p>
         </div>
       )}
@@ -238,11 +242,18 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value, status = "neutral" }: { label: string; value: string; status?: "neutral" | "ok" | "check" | "gap" }) {
+  const classes = status === "ok"
+    ? "bg-emerald-50 text-emerald-800"
+    : status === "gap"
+      ? "bg-rose-50 text-rose-800"
+      : status === "check"
+        ? "bg-amber-50 text-amber-800"
+        : "bg-slate-50 text-slate-700";
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-3">
-      <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">{label}</div>
-      <div className="mt-1 text-sm font-medium text-slate-700">{value}</div>
+    <div className={`rounded-xl px-3 py-3 ${classes}`}>
+      <div className="text-[11px] font-bold uppercase tracking-[0.1em] opacity-60">{label}</div>
+      <div className="mt-1 text-sm font-medium">{value}</div>
     </div>
   );
 }

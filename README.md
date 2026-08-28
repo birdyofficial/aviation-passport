@@ -1,38 +1,38 @@
-# Aviation Passport V0.1
+# Aviation Passport
 
-Starter Next.js + Supabase application for the Aviation Passport project.
+Aviation Passport is a structured global aviation workforce platform built around portable professional identity, declared employer demand, transparent compensation and explainable matching.
 
-## Included
+## Current prototype
 
-- Next.js 16 App Router
+V0.9.2 includes:
+
+- Worker Passport
+- Licences and aircraft ratings
+- Employment and aircraft exposure
+- Training and competencies
+- Company authorisations
+- Work rights and market preferences
+- Employer organisations
+- Open Demand
+- Aviation-specific demand requirements
+- Demand Intelligence
+- Anonymous and identified Talent Matches
+- Compensation impact scenarios
+
+## Stack
+
+- Next.js App Router
 - TypeScript
-- Tailwind CSS
-- Supabase SSR client setup
-- Cookie/session proxy
-- Basic sign-in / sign-up page
-- Protected `/passport` shell
-- V0.1 Supabase schema migration
-- Initial aviation reference seed
-- Full V0.1 product/build specification
+- Tailwind
+- Supabase PostgreSQL / Auth / Storage
+- Vercel
 
-## First run
+## Database changes
 
-See `SETUP-WINDOWS.md`.
+Versioned SQL migrations live in `supabase/migrations/`.
 
-## V0.2 — Passport editor
+For the browser-only deployment workflow, run only the new migration supplied with each release, then upload the GitHub-ready package and allow Vercel to deploy it.
 
-The `/passport` area now includes the first real database-backed worker Passport editor:
+## Product rule
 
-- Professional Identity
-- nationality and work rights
-- Licences & Ratings with private evidence upload
-- Employment & Environment
-- Aircraft family / variant / engine exposure
-- exposure level and recency
-- calculated blue dot / gold star / green shield Passport preview
-
-Run `SUPABASE-UPDATE-V0.2.sql` once before using credential uploads.
-
-
-## Project history
-See `CHANGELOG.md` and `supabase/migrations/` for version history.
+Individual talent access is demand-bound. Employers do not receive unrestricted access to the worker database.
