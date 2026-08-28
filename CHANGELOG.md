@@ -1,5 +1,11 @@
 # Changelog
 
+## V0.9.3 — Talent Match RPC Reliability
+- Fixed the individual Talent Matches RPC failing while Market Snapshot correctly found matches
+- Anonymous demand-specific display references no longer depend on pgcrypto search-path resolution
+- Added explicit return-type casts to the Talent Matches database function
+- Talent Matches now displays the actual Supabase RPC error message if a database call fails
+
 ## V0.9.2 — Clear Demand Intelligence + Salary Impact
 - Replaced the Supply Funnel UI with a straightforward Market Snapshot
 - Demand Intelligence now shows Mandatory-qualified, receptive, Talent Match, location-compatible and salary-compatible supply clearly

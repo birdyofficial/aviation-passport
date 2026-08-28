@@ -114,7 +114,13 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
         preferred_gaps: item.preferred_gaps ?? [],
       })));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not load talent matches.");
+      const message =
+        error instanceof Error
+          ? error.message
+          : error && typeof error === "object" && "message" in error
+            ? String((error as { message?: unknown }).message || "Could not load talent matches.")
+            : "Could not load talent matches.";
+      setNotice(message);
     } finally {
       setLoading(false);
     }
