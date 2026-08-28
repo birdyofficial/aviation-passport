@@ -1,5 +1,16 @@
 # Changelog
 
+## V0.9.1 — Visibility Simplification + Anonymous Matches
+- Simplified worker profile visibility to Private, Anonymous Market and Public
+- Removed Aviation Network from the worker-facing UI
+- Existing Aviation Network profiles migrate to Public
+- New worker profiles default to Anonymous Market
+- Anonymous Market workers can now appear in demand-bound Talent Matches
+- Anonymous cards hide worker UUID, name, professional headline and exact current location
+- Added demand-scoped anonymous match reference for stable employer-side display
+- Talent Match metrics now distinguish Identified and Anonymous matches
+- Private profiles remain excluded from individual Talent Matches
+
 ## V0.9 — Demand Workspace + Talent Matches
 - Requirements & Market now opens on a dedicated demand workspace page instead of appearing below the Employer Portal register
 - Added `/employer/demand/[id]` workspace with Requirements & Market and Talent Matches tabs

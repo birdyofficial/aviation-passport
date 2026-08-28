@@ -8,10 +8,12 @@ type MarketStatus = "not_open" | "selected_opportunities" | "actively_looking" |
 type MoneyPeriod = "hour" | "day" | "week" | "month" | "year" | "one_off";
 
 type TalentMatch = {
-  worker_id: string;
-  first_name: string;
+  match_ref: string;
+  worker_id: string | null;
+  is_anonymous: boolean;
+  first_name: string | null;
   middle_name: string | null;
-  last_name: string;
+  last_name: string | null;
   professional_headline: string | null;
   current_city: string | null;
   current_country_code: string | null;
@@ -143,14 +145,15 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
         </button>
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Metric label="Visible matches" value={String(matches.length)} />
-        <Metric label="Verified mandatory match" value={String(matches.filter((item) => item.verified_match).length)} />
-        <Metric label="Trainable matches" value={String(matches.filter((item) => item.trainable_gap_count > 0).length)} />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Talent matches" value={String(matches.length)} />
+        <Metric label="Identified" value={String(matches.filter((item) => !item.is_anonymous).length)} />
+        <Metric label="Anonymous" value={String(matches.filter((item) => item.is_anonymous).length)} />
+        <Metric label="Verified mandatory" value={String(matches.filter((item) => item.verified_match).length)} />
       </div>
 
       <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
-        No general worker search exists here. Private and anonymous-market profiles are excluded, and this list disappears when the demand is no longer Open.
+        Talent access remains demand-bound. Public profiles appear by name; Anonymous Market profiles appear without identity or exact personal details; Private profiles never appear as individual matches.
       </div>
 
       {notice ? <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{notice}</div> : null}
@@ -160,21 +163,24 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
       ) : matches.length ? (
         <div className="mt-6 space-y-4">
           {matches.map((match) => {
-            const fullName = [match.first_name, match.middle_name, match.last_name].filter(Boolean).join(" ");
-            const location = [match.current_city, match.current_country_code ? countryLabel(match.current_country_code) : null].filter(Boolean).join(", ");
+            const fullName = match.is_anonymous ? "Anonymous Aviation Professional" : [match.first_name, match.middle_name, match.last_name].filter(Boolean).join(" ");
+            const location = match.is_anonymous ? "Identity and exact location withheld" : [match.current_city, match.current_country_code ? countryLabel(match.current_country_code) : null].filter(Boolean).join(", ");
             const visibleMinimum = formatVisibleMinimum(match);
+            const anonymousReference = match.match_ref.slice(0, 6).toUpperCase();
 
             return (
-              <article key={match.worker_id} className="rounded-2xl border border-slate-200 p-5">
+              <article key={match.match_ref} className="rounded-2xl border border-slate-200 p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-lg font-semibold text-slate-950">{fullName}</h3>
+                      {match.is_anonymous ? <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">Anonymous · {anonymousReference}</span> : null}
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${matchClasses(match.match_label)}`}>{match.match_label}</span>
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${match.verified_match ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>{match.trust_label}</span>
                     </div>
-                    <div className="mt-1 text-sm text-slate-700">{match.professional_headline || "Aviation professional"}</div>
+                    <div className="mt-1 text-sm text-slate-700">{match.is_anonymous ? "Demand-compatible aviation professional" : match.professional_headline || "Aviation professional"}</div>
                     <div className="mt-1 text-xs text-slate-500">{location || "Location not listed"} · {MARKET_LABELS[match.market_status]}</div>
+                    {match.is_anonymous ? <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">This worker is participating anonymously. The employer can assess demand compatibility, but identity remains protected until the worker chooses to reveal it.</div> : null}
                   </div>
                 </div>
 
@@ -213,9 +219,9 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
         </div>
       ) : (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 p-8 text-center">
-          <div className="font-semibold text-slate-900">No visible talent matches yet</div>
+          <div className="font-semibold text-slate-900">No talent matches yet</div>
           <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            That can be completely normal while the platform has only a few Passports. A worker must be open to opportunities, have an employer-visible profile, meet every Mandatory requirement and be compatible with the location/work-right rules.
+            A worker must be receptive, meet every Mandatory requirement and be compatible with the opportunity. Public and Anonymous Market profiles can appear here; Private profiles cannot.
           </p>
         </div>
       )}

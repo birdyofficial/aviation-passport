@@ -206,6 +206,8 @@ type Tab = "preview" | "identity" | "licences" | "employment" | "training" | "au
 
 type Notice = { type: "success" | "error"; text: string } | null;
 
+type PublicProfileVisibility = "public" | "anonymous_market" | "private";
+
 type IdentityForm = {
   first_name: string;
   middle_name: string;
@@ -214,7 +216,7 @@ type IdentityForm = {
   current_city: string;
   current_country_code: string;
   preferred_currency: string;
-  visibility: Profile["visibility"];
+  visibility: PublicProfileVisibility;
   market_status: Profile["market_status"];
   primary_nationality: string;
   nationality_visibility: Nationality["visibility"];
@@ -228,7 +230,7 @@ const emptyProfile: IdentityForm = {
   current_city: "",
   current_country_code: "",
   preferred_currency: "AUD",
-  visibility: "aviation_network",
+  visibility: "anonymous_market",
   market_status: "not_open",
   primary_nationality: "",
   nationality_visibility: "visible",
@@ -689,7 +691,7 @@ export default function PassportEditor() {
         current_city: loadedProfile.current_city ?? "",
         current_country_code: loadedProfile.current_country_code ?? "",
         preferred_currency: loadedProfile.preferred_currency,
-        visibility: loadedProfile.visibility,
+        visibility: loadedProfile.visibility === "aviation_network" ? "public" : loadedProfile.visibility,
         market_status: loadedProfile.market_status,
         primary_nationality: primaryNationality?.country_code ?? "",
         nationality_visibility: primaryNationality?.visibility ?? "visible",
@@ -1896,7 +1898,7 @@ export default function PassportEditor() {
               <Field label="Preferred currency" hint="All market money will eventually display in this currency"><input className="input uppercase" maxLength={3} value={identityForm.preferred_currency} onChange={(e) => setIdentityForm({ ...identityForm, preferred_currency: e.target.value.toUpperCase() })} required /></Field>
               <Field label="Primary nationality"><CountrySelect value={identityForm.primary_nationality} onChange={(value) => setIdentityForm({ ...identityForm, primary_nationality: value })} /></Field>
               <Field label="Nationality visibility"><select className="input" value={identityForm.nationality_visibility} onChange={(e) => setIdentityForm({ ...identityForm, nationality_visibility: e.target.value as typeof identityForm.nationality_visibility })}><option value="visible">Visible</option><option value="employers_only">Employers only</option><option value="hidden">Hidden</option></select></Field>
-              <Field label="Profile visibility"><select className="input" value={identityForm.visibility} onChange={(e) => setIdentityForm({ ...identityForm, visibility: e.target.value as Profile["visibility"] })}><option value="public">Public</option><option value="aviation_network">Aviation network</option><option value="anonymous_market">Anonymous market</option><option value="private">Private</option></select></Field>
+              <Field label="Profile visibility" hint={identityForm.visibility === "public" ? "Named profile can appear to authorised employers when you match their Open Demand." : identityForm.visibility === "anonymous_market" ? "You can appear as an anonymous match and receive platform-mediated opportunities without revealing your identity." : "You do not appear as an individual Talent Match."}><select className="input" value={identityForm.visibility} onChange={(e) => setIdentityForm({ ...identityForm, visibility: e.target.value as PublicProfileVisibility })}><option value="private">Private</option><option value="anonymous_market">Anonymous market</option><option value="public">Public</option></select></Field>
               <Field label="Market status"><select className="input" value={identityForm.market_status} onChange={(e) => setIdentityForm({ ...identityForm, market_status: e.target.value as Profile["market_status"] })}><option value="not_open">Not open</option><option value="selected_opportunities">Open to selected opportunities</option><option value="actively_looking">Actively looking</option><option value="contract_only">Contract only</option></select></Field>
             </div>
             <button disabled={busy} className="mt-7 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save Professional Identity"}</button>
