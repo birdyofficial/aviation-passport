@@ -53,6 +53,7 @@ type MarketSnapshot = {
   receptive_match: number;
   talent_matches: number;
   location_compatible: number;
+  availability_compatible: number;
   salary_compatible: number;
   ready_now: number;
   identified_matches: number;
@@ -296,6 +297,7 @@ export default function DemandRequirements({
       receptive_match: Number(row.receptive_match ?? 0),
       talent_matches: Number(row.talent_matches ?? 0),
       location_compatible: Number(row.location_compatible ?? 0),
+      availability_compatible: Number(row.availability_compatible ?? 0),
       salary_compatible: Number(row.salary_compatible ?? 0),
       ready_now: Number(row.ready_now ?? 0),
       identified_matches: Number(row.identified_matches ?? 0),
@@ -514,8 +516,9 @@ export default function DemandRequirements({
                 <SnapshotRow label="Open to this type of opportunity" value={marketSnapshot?.receptive_match ?? 0} />
                 <SnapshotRow label="Appears in Talent Matches" value={marketSnapshot?.talent_matches ?? 0} />
                 <SnapshotRow label="Location compatible now" value={marketSnapshot?.location_compatible ?? 0} />
+                <SnapshotRow label="Available by expected start" value={marketSnapshot?.availability_compatible ?? 0} />
                 <SnapshotRow label="Compatible with current pay range" value={marketSnapshot?.salary_compatible ?? 0} />
-                <SnapshotRow label="Ready at current location + package" value={marketSnapshot?.ready_now ?? 0} strong />
+                <SnapshotRow label="Ready at location + start + package" value={marketSnapshot?.ready_now ?? 0} strong />
               </div>
 
               <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
@@ -571,7 +574,7 @@ export default function DemandRequirements({
                   </div>
                   <div>
                     <div className="text-3xl font-semibold tracking-tight text-slate-950">{salarySnapshot?.ready_now ?? 0}</div>
-                    <div className="mt-1 text-sm text-slate-600">ready at location + package</div>
+                    <div className="mt-1 text-sm text-slate-600">ready at location + start + package</div>
                   </div>
                 </div>
                 {marketSnapshot && salarySnapshot ? (

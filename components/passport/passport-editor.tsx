@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { COUNTRIES, EU_COUNTRY_CODES, countryLabel } from "@/lib/reference/countries";
 import { LICENCE_SYSTEMS } from "@/lib/reference/licensing";
+import OpportunitiesPanel from "@/components/passport/opportunities-panel";
 
 type Profile = {
   id: string;
@@ -202,7 +203,7 @@ type LocationPreference = {
   relocation_mode: string | null;
 };
 
-type Tab = "preview" | "identity" | "licences" | "employment" | "training" | "authorisations" | "market";
+type Tab = "preview" | "identity" | "licences" | "employment" | "training" | "authorisations" | "market" | "opportunities";
 
 type Notice = { type: "success" | "error"; text: string } | null;
 
@@ -1685,6 +1686,7 @@ export default function PassportEditor() {
           ["training", "Training & Competencies"],
           ["authorisations", "Company Authorisations"],
           ["market", "Market Preferences"],
+          ["opportunities", "Opportunities"],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -2370,6 +2372,8 @@ export default function PassportEditor() {
           </div>
         </div>
       ) : null}
+
+      {tab === "opportunities" && profile ? <OpportunitiesPanel /> : null}
     </div>
   );
 }

@@ -1,5 +1,21 @@
 # Changelog
 
+## V0.10 — Structured Opportunities
+- Employers can send a Talent Match the actual structured Open Demand; no generic recruiter message
+- Anonymous Market workers can receive opportunities without revealing identity
+- Added worker Opportunities tab with role, organisation, location, roster, compensation, sponsorship, requirements and accepted gaps
+- Worker responses: Interested, Ask a question, Decline
+- Anonymous questions remain anonymous
+- Choosing Interested on an Anonymous Market opportunity reveals identity only for that demand
+- Employer Talent Matches shows opportunity status and worker questions
+- Work Rights cards now distinguish verified, verification-pending, sponsorship and incompatibility
+- Availability is now evaluated against the demand expected-start date
+- Availability cards use green / amber / neutral compatibility signals
+- Demand Intelligence now includes availability compatibility
+- Ready-at-package counts now include location, start-date availability and compensation
+- Employer Opportunity access is RPC-controlled so anonymous worker IDs are not exposed through direct opportunity-table access
+- Added demand requirement summaries to the worker opportunity card
+
 ## V0.9.3 — Talent Match RPC Reliability
 - Fixed the individual Talent Matches RPC failing while Market Snapshot correctly found matches
 - Anonymous demand-specific display references no longer depend on pgcrypto search-path resolution
