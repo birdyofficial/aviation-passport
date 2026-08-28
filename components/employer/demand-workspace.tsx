@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { countryLabel } from "@/lib/reference/countries";
 import DemandRequirements from "@/components/employer/demand-requirements";
 import TalentMatches from "@/components/employer/talent-matches";
+import CandidatePipeline from "@/components/employer/candidate-pipeline";
 
 type DemandStatus = "draft" | "open" | "paused" | "needs_confirmation" | "filled" | "cancelled";
-type Tab = "requirements" | "matches";
+type Tab = "requirements" | "matches" | "pipeline";
 
 type Demand = {
   id: string;
@@ -138,6 +139,13 @@ export default function DemandWorkspace({ demandId }: { demandId: string }) {
         >
           Talent Matches{demand.status !== "open" ? " · Open demand required" : ""}
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("pipeline")}
+          className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${tab === "pipeline" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+        >
+          Candidate Pipeline
+        </button>
       </div>
 
       <div className="mt-6">
@@ -149,8 +157,10 @@ export default function DemandWorkspace({ demandId }: { demandId: string }) {
             sponsorshipAvailable={demand.sponsorship_available}
             onClose={() => router.push("/employer")}
           />
-        ) : (
+        ) : tab === "matches" ? (
           <TalentMatches demandId={demand.id} demandStatus={demand.status} />
+        ) : (
+          <CandidatePipeline demandId={demand.id} onDemandChanged={() => void loadDemand()} />
         )}
       </div>
     </div>

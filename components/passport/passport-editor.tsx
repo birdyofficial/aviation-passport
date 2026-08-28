@@ -1677,21 +1677,25 @@ export default function PassportEditor() {
         </div>
       </div>
 
-      <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200 pb-px">
+      <div className="mt-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-4 xl:grid-cols-8">
         {([
-          ["preview", "Passport Preview"],
-          ["identity", "Professional Identity"],
-          ["licences", "Licences & Ratings"],
-          ["employment", "Employment & Aircraft"],
-          ["training", "Training & Competencies"],
-          ["authorisations", "Company Authorisations"],
-          ["market", "Market Preferences"],
+          ["preview", "Passport"],
+          ["identity", "Identity"],
+          ["licences", "Licences"],
+          ["employment", "Employment"],
+          ["training", "Training"],
+          ["authorisations", "Authorisations"],
+          ["market", "Preferences"],
           ["opportunities", "Opportunities"],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition ${tab === key ? "border-slate-950 text-slate-950" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+            className={`min-w-0 rounded-xl px-3 py-2.5 text-center text-sm font-semibold transition ${
+              tab === key
+                ? "bg-slate-950 text-white"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
           >
             {label}
           </button>

@@ -1,5 +1,26 @@
 # Changelog
 
+## V0.11 — Candidate Pipeline + Hiring Outcomes
+- Worker navigation is now a responsive grid: all sections remain visible without horizontal scrolling
+- Added dedicated Candidate Pipeline tab to every demand workspace
+- Separate hiring pipeline state from worker opportunity-response state
+- Hiring flow: Interested → Conversation → Interview → Offer → Accepted → Hired
+- Exit states: Declined, Withdrawn, Closed
+- Added structured formal offers with:
+  - exact base compensation
+  - native currency and pay period
+  - employment type
+  - start date
+  - shift and roster
+  - repeatable allowances / package components
+  - benefits
+- Workers can Accept, Decline or Ask a Question about a formal offer
+- Employer can reply to questions during both the initial opportunity and offer stages
+- Anonymous identity remains protected until the worker chooses Interested
+- Marking a candidate Hired decrements positions remaining exactly once
+- Demand automatically becomes Filled when positions remaining reaches zero
+- Worker Opportunities shows live pipeline progress and the complete formal package
+
 ## V0.10 — Structured Opportunities
 - Employers can send a Talent Match the actual structured Open Demand; no generic recruiter message
 - Anonymous Market workers can receive opportunities without revealing identity
