@@ -1,5 +1,11 @@
 # Changelog
 
+## V0.12.1 — Small UX Cleanup
+- Employer Talent Matches CTA now says “Send opportunity”
+- Removed “structured” from the worker-facing/employer-facing opportunity action wording where unnecessary
+- Worker Opportunities action badge moved to the left side of the tab so it no longer overlaps the label
+- No Supabase changes required
+
 ## V0.12 — My Value + Action Indicators
 - Added My Value as a first-class worker tab
 - My Value uses compatible live Open Demand rather than generic salary tables

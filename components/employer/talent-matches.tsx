@@ -201,8 +201,8 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
       setNotice({
         type: "success",
         text: match.is_anonymous
-          ? "Structured opportunity sent through Aviation Passport. The worker remains anonymous until they choose to reveal their Passport."
-          : "Structured opportunity sent.",
+          ? "Opportunity sent through Aviation Passport. The worker remains anonymous until they choose to reveal their Passport."
+          : "Opportunity sent.",
       });
       await loadMatches();
     } catch (error) {
@@ -333,7 +333,7 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
                         onClick={() => void sendOpportunity(match)}
                         className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                       >
-                        {sendingRef === match.match_ref ? "Sending…" : "Send structured opportunity"}
+                        {sendingRef === match.match_ref ? "Sending…" : "Send opportunity"}
                       </button>
                     ) : (
                       <div className={`rounded-xl border px-4 py-2.5 text-sm font-semibold ${opportunityClasses(match.opportunity_status)}`}>

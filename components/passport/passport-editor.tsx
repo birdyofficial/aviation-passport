@@ -1714,7 +1714,7 @@ export default function PassportEditor() {
           >
             <span>{label}</span>
             {key === "opportunities" && opportunityActionCount > 0 ? (
-              <span className={`absolute right-1.5 top-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? "bg-white text-slate-950" : "bg-rose-600 text-white"}`} title={`${opportunityActionCount} ${opportunityActionCount === 1 ? "opportunity needs" : "opportunities need"} your action`}>
+              <span className={`absolute left-1.5 top-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? "bg-white text-slate-950" : "bg-rose-600 text-white"}`} title={`${opportunityActionCount} ${opportunityActionCount === 1 ? "opportunity needs" : "opportunities need"} your action`}>
                 {opportunityActionCount}
               </span>
             ) : null}
