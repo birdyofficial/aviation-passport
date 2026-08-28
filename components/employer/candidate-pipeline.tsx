@@ -142,9 +142,11 @@ function errorMessage(error: unknown, fallback: string) {
 export default function CandidatePipeline({
   demandId,
   onDemandChanged,
+  onActionChanged,
 }: {
   demandId: string;
   onDemandChanged?: () => void;
+  onActionChanged?: () => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
@@ -264,6 +266,7 @@ export default function CandidatePipeline({
           : `Candidate moved to ${STAGE_LABELS[stage]}.`,
       });
       await loadPipeline();
+      onActionChanged?.();
       if (stage === "hired") onDemandChanged?.();
     } catch (error) {
       setNotice({ type: "error", text: errorMessage(error, "Could not update candidate stage.") });
@@ -319,6 +322,7 @@ export default function CandidatePipeline({
       setOfferOpportunityId(null);
       setNotice({ type: "success", text: candidate.offer_id ? "Structured offer updated and re-sent." : "Structured offer sent." });
       await loadPipeline();
+      onActionChanged?.();
     } catch (error) {
       setNotice({ type: "error", text: errorMessage(error, "Could not send structured offer.") });
     } finally {
@@ -341,6 +345,7 @@ export default function CandidatePipeline({
       setReplyText("");
       setNotice({ type: "success", text: "Reply sent through Aviation Passport." });
       await loadPipeline();
+      onActionChanged?.();
     } catch (error) {
       setNotice({ type: "error", text: errorMessage(error, "Could not send reply.") });
     } finally {
@@ -497,12 +502,15 @@ export default function CandidatePipeline({
                         </select>
                       </Field>
                       <Field label="Start date"><input type="date" className="input" value={offerForm.start_date} onChange={(e) => setOfferForm({ ...offerForm, start_date: e.target.value })} /></Field>
-                      <Field label="Shift">
+                      <Field label="Schedule / shift">
                         <select className="input" value={offerForm.shift} onChange={(e) => setOfferForm({ ...offerForm, shift: e.target.value })}>
                           <option value="any">Any / mixed</option>
+                          <option value="monday_friday">Monday–Friday</option>
+                          <option value="fixed_weekdays">Fixed weekdays</option>
                           <option value="days">Day shift</option>
                           <option value="nights">Night shift</option>
                           <option value="rotating">Rotating days / nights</option>
+                          <option value="weekends">Weekend-focused</option>
                         </select>
                       </Field>
                       <Field label="Roster pattern"><input className="input" value={offerForm.roster_pattern} onChange={(e) => setOfferForm({ ...offerForm, roster_pattern: e.target.value })} placeholder="5 on / 3 off" /></Field>

@@ -182,6 +182,7 @@ export default function EmployerDashboard() {
   const [demands, setDemands] = useState<Demand[]>([]);
   const [demandEnvironments, setDemandEnvironments] = useState<DemandEnvironment[]>([]);
   const [compensation, setCompensation] = useState<CompensationComponent[]>([]);
+  const [employerActionCounts, setEmployerActionCounts] = useState<Record<string, number>>({});
 
   const [showOrganisationForm, setShowOrganisationForm] = useState(false);
   const [organisationForm, setOrganisationForm] = useState({
@@ -341,17 +342,21 @@ export default function EmployerDashboard() {
       if (!ids.length) {
         setDemandEnvironments([]);
         setCompensation([]);
+        setEmployerActionCounts({});
         return;
       }
 
-      const [environmentResult, compensationResult] = await Promise.all([
+      const [environmentResult, compensationResult, actionResult] = await Promise.all([
         supabase.from("demand_environments").select("*").in("demand_id", ids),
         supabase.from("demand_compensation_components").select("*").in("demand_id", ids),
+        supabase.rpc("get_my_employer_action_counts"),
       ]);
       if (environmentResult.error) throw environmentResult.error;
       if (compensationResult.error) throw compensationResult.error;
+      if (actionResult.error) throw actionResult.error;
       setDemandEnvironments((environmentResult.data ?? []) as DemandEnvironment[]);
       setCompensation((compensationResult.data ?? []) as CompensationComponent[]);
+      setEmployerActionCounts(Object.fromEntries((actionResult.data ?? []).map((item: { demand_id: string; action_count: number }) => [item.demand_id, Number(item.action_count)])));
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not load Open Demand." });
     }
@@ -792,12 +797,15 @@ export default function EmployerDashboard() {
 
                 <Section title="Roster & timing">
                   <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="Shift">
+                    <Field label="Schedule / shift">
                       <select className="input" value={demandForm.roster_shift} onChange={(e) => setDemandForm({ ...demandForm, roster_shift: e.target.value })}>
                         <option value="any">Any / mixed</option>
+                        <option value="monday_friday">Monday–Friday</option>
+                        <option value="fixed_weekdays">Fixed weekdays</option>
                         <option value="days">Day shift</option>
                         <option value="nights">Night shift</option>
                         <option value="rotating">Rotating days / nights</option>
+                        <option value="weekends">Weekend-focused</option>
                       </select>
                     </Field>
                     <Field label="Roster pattern (optional)"><input className="input" value={demandForm.roster_pattern} onChange={(e) => setDemandForm({ ...demandForm, roster_pattern: e.target.value })} placeholder="5 on / 3 off, 14/14…" /></Field>
@@ -870,7 +878,15 @@ export default function EmployerDashboard() {
                             <div className="font-semibold text-slate-950">{demand.public_title}</div>
                             <div className="mt-1 text-sm text-slate-600">{demand.profession}{demand.discipline ? ` · ${demand.discipline}` : ""}</div>
                           </div>
-                          <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClasses(demand.status)}`}>{STATUS_LABELS[demand.status]}</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {(employerActionCounts[demand.id] ?? 0) > 0 ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700" title="The ball is in the employer's court">
+                                <span className="h-2 w-2 rounded-full bg-rose-600" />
+                                {employerActionCounts[demand.id]} {employerActionCounts[demand.id] === 1 ? "action" : "actions"}
+                              </span>
+                            ) : null}
+                            <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClasses(demand.status)}`}>{STATUS_LABELS[demand.status]}</span>
+                          </div>
                         </div>
 
                         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -890,7 +906,7 @@ export default function EmployerDashboard() {
 
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button type="button" disabled={busy} onClick={() => editDemand(demand)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Edit</button>
-                          <a href={`/employer/demand/${demand.id}`} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Requirements & market</a>
+                          <a href={`/employer/demand/${demand.id}`} className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Open workspace</a>
                           {demand.status !== "open" && demand.status !== "filled" && demand.status !== "cancelled" ? (
                             <button type="button" disabled={busy} onClick={() => void changeDemandStatus(demand, "open")} className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Open demand</button>
                           ) : null}

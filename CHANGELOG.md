@@ -1,5 +1,22 @@
 # Changelog
 
+## V0.12 — My Value + Action Indicators
+- Added My Value as a first-class worker tab
+- My Value uses compatible live Open Demand rather than generic salary tables
+- Shows compatible demand, geographic reach, trust-backed fit and demand strength
+- Compensation intelligence groups packages by preferred currency and common pay basis
+- A market compensation range is shown only with at least 3 comparable live packages
+- Shows market confidence/sample size instead of fake precision
+- Shows top non-confidential compatible markets
+- Shows recurring Preferred and Trainable gaps as opportunity-value signals
+- Added worker action badge beside Opportunities when the worker needs to act
+- Added employer action badge beside Candidate Pipeline when HR needs to act
+- Employer Portal demand cards show per-demand action counts
+- Action indicators represent whose turn it is, not generic unread notifications
+- Structured offers now include Monday–Friday, fixed weekdays and weekend-focused schedules
+- Demand creation uses the same broader schedule choices
+- Sending a fresh formal offer clears an older question so responsibility is unambiguous
+
 ## V0.11 — Candidate Pipeline + Hiring Outcomes
 - Worker navigation is now a responsive grid: all sections remain visible without horizontal scrolling
 - Added dedicated Candidate Pipeline tab to every demand workspace

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { COUNTRIES, EU_COUNTRY_CODES, countryLabel } from "@/lib/reference/countries";
 import { LICENCE_SYSTEMS } from "@/lib/reference/licensing";
 import OpportunitiesPanel from "@/components/passport/opportunities-panel";
+import MyValuePanel from "@/components/passport/my-value-panel";
 
 type Profile = {
   id: string;
@@ -203,7 +204,7 @@ type LocationPreference = {
   relocation_mode: string | null;
 };
 
-type Tab = "preview" | "identity" | "licences" | "employment" | "training" | "authorisations" | "market" | "opportunities";
+type Tab = "preview" | "value" | "identity" | "licences" | "employment" | "training" | "authorisations" | "market" | "opportunities";
 
 type Notice = { type: "success" | "error"; text: string } | null;
 
@@ -385,6 +386,7 @@ export default function PassportEditor() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [userId, setUserId] = useState("");
+  const [opportunityActionCount, setOpportunityActionCount] = useState(0);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [nationalities, setNationalities] = useState<Nationality[]>([]);
@@ -704,8 +706,19 @@ export default function PassportEditor() {
 
   useEffect(() => {
     void loadData();
+    void loadWorkerActionCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function loadWorkerActionCount() {
+    try {
+      const { data, error } = await supabase.rpc("get_my_worker_action_count");
+      if (error) throw error;
+      setOpportunityActionCount(Number(data ?? 0));
+    } catch {
+      setOpportunityActionCount(0);
+    }
+  }
 
   async function uploadEvidence(file: File | null, folder: string) {
     if (!file || !userId) return null;
@@ -1677,9 +1690,10 @@ export default function PassportEditor() {
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-4 xl:grid-cols-8">
+      <div className="mt-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9">
         {([
           ["preview", "Passport"],
+          ["value", "My Value"],
           ["identity", "Identity"],
           ["licences", "Licences"],
           ["employment", "Employment"],
@@ -1690,14 +1704,20 @@ export default function PassportEditor() {
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
-            className={`min-w-0 rounded-xl px-3 py-2.5 text-center text-sm font-semibold transition ${
-              tab === key
-                ? "bg-slate-950 text-white"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            onClick={() => {
+              setTab(key);
+              if (key === "opportunities") void loadWorkerActionCount();
+            }}
+            className={`relative min-w-0 rounded-xl px-3 py-2.5 text-center text-sm font-semibold transition ${
+              tab === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
             }`}
           >
-            {label}
+            <span>{label}</span>
+            {key === "opportunities" && opportunityActionCount > 0 ? (
+              <span className={`absolute right-1.5 top-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? "bg-white text-slate-950" : "bg-rose-600 text-white"}`} title={`${opportunityActionCount} ${opportunityActionCount === 1 ? "opportunity needs" : "opportunities need"} your action`}>
+                {opportunityActionCount}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -1886,6 +1906,8 @@ export default function PassportEditor() {
           </aside>
         </div>
       ) : null}
+
+      {tab === "value" && profile ? <MyValuePanel /> : null}
 
       {tab === "identity" ? (
         <div className="mt-6 space-y-6">
@@ -2377,7 +2399,7 @@ export default function PassportEditor() {
         </div>
       ) : null}
 
-      {tab === "opportunities" && profile ? <OpportunitiesPanel /> : null}
+      {tab === "opportunities" && profile ? <OpportunitiesPanel onActionCountChanged={() => void loadWorkerActionCount()} /> : null}
     </div>
   );
 }

@@ -56,8 +56,20 @@ export default function DemandWorkspace({ demandId }: { demandId: string }) {
   const [demand, setDemand] = useState<Demand | null>(null);
   const [organisation, setOrganisation] = useState<Organisation | null>(null);
   const [tab, setTab] = useState<Tab>("requirements");
+  const [employerActionCount, setEmployerActionCount] = useState(0);
 
   useEffect(() => { void loadDemand(); }, [demandId]);
+
+  async function loadEmployerActionCount() {
+    try {
+      const { data, error } = await supabase.rpc("get_my_employer_action_counts");
+      if (error) throw error;
+      const row = (data ?? []).find((item: { demand_id: string; action_count: number }) => item.demand_id === demandId);
+      setEmployerActionCount(Number(row?.action_count ?? 0));
+    } catch {
+      setEmployerActionCount(0);
+    }
+  }
 
   async function loadDemand() {
     setLoading(true);
@@ -80,6 +92,7 @@ export default function DemandWorkspace({ demandId }: { demandId: string }) {
         .single();
       if (organisationResult.error) throw organisationResult.error;
       setOrganisation(organisationResult.data as Organisation);
+      await loadEmployerActionCount();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not load this demand workspace.");
     } finally {
@@ -141,10 +154,18 @@ export default function DemandWorkspace({ demandId }: { demandId: string }) {
         </button>
         <button
           type="button"
-          onClick={() => setTab("pipeline")}
-          className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${tab === "pipeline" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+          onClick={() => {
+            setTab("pipeline");
+            void loadEmployerActionCount();
+          }}
+          className={`relative rounded-xl px-4 py-2.5 pr-10 text-sm font-semibold ${tab === "pipeline" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}
         >
           Candidate Pipeline
+          {employerActionCount > 0 ? (
+            <span className={`absolute right-2 top-1/2 inline-flex min-w-5 -translate-y-1/2 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${tab === "pipeline" ? "bg-white text-slate-950" : "bg-rose-600 text-white"}`} title={`${employerActionCount} ${employerActionCount === 1 ? "candidate needs" : "candidates need"} employer action`}>
+              {employerActionCount}
+            </span>
+          ) : null}
         </button>
       </div>
 
@@ -160,7 +181,11 @@ export default function DemandWorkspace({ demandId }: { demandId: string }) {
         ) : tab === "matches" ? (
           <TalentMatches demandId={demand.id} demandStatus={demand.status} />
         ) : (
-          <CandidatePipeline demandId={demand.id} onDemandChanged={() => void loadDemand()} />
+          <CandidatePipeline
+            demandId={demand.id}
+            onDemandChanged={() => void loadDemand()}
+            onActionChanged={() => void loadEmployerActionCount()}
+          />
         )}
       </div>
     </div>

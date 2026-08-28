@@ -143,8 +143,16 @@ function employmentLabel(value: string | null) {
 
 function rosterLabel(roster: Opportunity["roster"]) {
   if (!roster) return "Not specified";
+  const scheduleLabels: Record<string, string> = {
+    monday_friday: "Monday–Friday",
+    fixed_weekdays: "Fixed weekdays",
+    days: "Day shift",
+    nights: "Night shift",
+    rotating: "Rotating days / nights",
+    weekends: "Weekend-focused",
+  };
   const shift = roster.shift && roster.shift !== "any"
-    ? roster.shift.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+    ? scheduleLabels[roster.shift] ?? roster.shift.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
     : null;
   return [shift, roster.pattern].filter(Boolean).join(" · ") || "Flexible / not specified";
 }
@@ -163,7 +171,7 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-export default function OpportunitiesPanel() {
+export default function OpportunitiesPanel({ onActionCountChanged }: { onActionCountChanged?: () => void }) {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -226,6 +234,7 @@ export default function OpportunitiesPanel() {
       setQuestion("");
       setQuestionId(null);
       await loadOpportunities();
+      onActionCountChanged?.();
     } catch (error) {
       setNotice({ type: "error", text: errorMessage(error, "Could not respond to opportunity.") });
     } finally {
@@ -250,6 +259,7 @@ export default function OpportunitiesPanel() {
       setQuestion("");
       setQuestionId(null);
       await loadOpportunities();
+      onActionCountChanged?.();
     } catch (error) {
       setNotice({ type: "error", text: errorMessage(error, "Could not respond to the formal offer.") });
     } finally {
