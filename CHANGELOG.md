@@ -1,5 +1,11 @@
 # Changelog
 
+## V0.12.2 — Opportunities Badge Spacing
+- Moved the worker Opportunities action badge back to the far right
+- Reserved dedicated right-side space inside the Opportunities tab whenever the badge is visible
+- Vertically centred the badge so it cannot overlap the tab label
+- No Supabase changes required
+
 ## V0.12.1 — Small UX Cleanup
 - Employer Talent Matches CTA now says “Send opportunity”
 - Removed “structured” from the worker-facing/employer-facing opportunity action wording where unnecessary

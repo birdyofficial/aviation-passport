@@ -1708,13 +1708,15 @@ export default function PassportEditor() {
               setTab(key);
               if (key === "opportunities") void loadWorkerActionCount();
             }}
-            className={`relative min-w-0 rounded-xl px-3 py-2.5 text-center text-sm font-semibold transition ${
+            className={`relative min-w-0 rounded-xl py-2.5 text-center text-sm font-semibold transition ${
+              key === "opportunities" && opportunityActionCount > 0 ? "pl-2 pr-9" : "px-3"
+            } ${
               tab === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
             }`}
           >
             <span>{label}</span>
             {key === "opportunities" && opportunityActionCount > 0 ? (
-              <span className={`absolute left-1.5 top-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? "bg-white text-slate-950" : "bg-rose-600 text-white"}`} title={`${opportunityActionCount} ${opportunityActionCount === 1 ? "opportunity needs" : "opportunities need"} your action`}>
+              <span className={`absolute right-2 top-1/2 inline-flex min-w-5 -translate-y-1/2 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? "bg-white text-slate-950" : "bg-rose-600 text-white"}`} title={`${opportunityActionCount} ${opportunityActionCount === 1 ? "opportunity needs" : "opportunities need"} your action`}>
                 {opportunityActionCount}
               </span>
             ) : null}
