@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { countryLabel } from "@/lib/reference/countries";
+import WorkerInterviewRounds from "@/components/passport/worker-interviews";
 
 type OpportunityStatus = "sent" | "viewed" | "interested" | "question" | "declined" | "interview" | "offer" | "accepted" | "withdrawn" | "closed";
-type PipelineStage = "approached" | "interested" | "conversation" | "interview" | "offer" | "accepted" | "hired" | "declined" | "withdrawn" | "closed";
+type PipelineStage = "approached" | "interested" | "interview" | "offer" | "accepted" | "hired" | "declined" | "withdrawn" | "closed";
 type MoneyPeriod = "hour" | "day" | "week" | "month" | "year" | "one_off";
 type EmploymentType = "permanent" | "fixed_term" | "contractor" | "casual" | "part_time" | "self_employed" | "agency";
 
@@ -66,8 +67,7 @@ type Opportunity = {
 const PIPELINE_LABELS: Record<PipelineStage, string> = {
   approached: "Opportunity received",
   interested: "Interested",
-  conversation: "Conversation",
-  interview: "Interview",
+  interview: "Interviewing",
   offer: "Formal offer",
   accepted: "Offer accepted",
   hired: "Hired",
@@ -97,8 +97,7 @@ const PERIOD_LABELS: Record<MoneyPeriod, string> = {
 
 const PIPELINE_STEPS: { key: PipelineStage; label: string }[] = [
   { key: "interested", label: "Interested" },
-  { key: "conversation", label: "Conversation" },
-  { key: "interview", label: "Interview" },
+  { key: "interview", label: "Interviewing" },
   { key: "offer", label: "Offer" },
   { key: "accepted", label: "Accepted" },
   { key: "hired", label: "Hired" },
@@ -111,7 +110,7 @@ function stageRank(stage: PipelineStage) {
 function stageClasses(stage: PipelineStage) {
   if (stage === "hired") return "border-emerald-300 bg-emerald-100 text-emerald-800";
   if (stage === "accepted" || stage === "interested") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (stage === "conversation" || stage === "interview" || stage === "offer") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (stage === "interview" || stage === "offer") return "border-violet-200 bg-violet-50 text-violet-700";
   if (stage === "declined" || stage === "withdrawn" || stage === "closed") return "border-slate-200 bg-slate-100 text-slate-600";
   return "border-blue-200 bg-blue-50 text-blue-700";
 }
@@ -311,7 +310,7 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
                   {anonymousUnrevealed ? <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">You are still anonymous. Asking a question does not reveal you. Choosing Interested reveals your employer-visible Passport only for this opportunity.</div> : null}
 
                   {!terminal && opportunity.pipeline_stage !== "approached" ? (
-                    <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                    <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-5">
                       {PIPELINE_STEPS.map((step, index) => (
                         <div key={step.key} className={`rounded-lg border px-2 py-2 text-center text-[11px] font-semibold ${
                           opportunity.pipeline_stage === step.key
@@ -341,17 +340,27 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
 
                   {opportunity.worker_question ? (
                     <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-blue-500">Your question</div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-blue-500">Conversation · Your question</div>
                       <div className="mt-1 text-sm text-blue-950">{opportunity.worker_question}</div>
                       {opportunity.employer_reply ? <div className="mt-3 rounded-lg border border-blue-100 bg-white px-3 py-2"><div className="text-[10px] font-bold uppercase tracking-[0.1em] text-blue-400">Employer reply</div><div className="mt-1 text-sm text-slate-800">{opportunity.employer_reply}</div></div> : <div className="mt-2 text-xs text-blue-700">Waiting for employer reply.</div>}
                     </div>
+                  ) : null}
+
+                  {["interested", "interview", "offer", "accepted", "hired"].includes(opportunity.pipeline_stage) ? (
+                    <WorkerInterviewRounds
+                      opportunityId={opportunity.opportunity_id}
+                      onActionChanged={() => {
+                        void loadOpportunities();
+                        onActionCountChanged?.();
+                      }}
+                    />
                   ) : null}
 
                   {opportunity.offer_id ? (
                     <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <div className="text-xs font-bold uppercase tracking-[0.12em] text-violet-500">Formal structured offer</div>
+                          <div className="text-xs font-bold uppercase tracking-[0.12em] text-violet-500">Formal offer</div>
                           <div className="mt-2 text-2xl font-semibold tracking-tight text-violet-950">{formatMoney(opportunity.offer_base_compensation, opportunity.offer_currency)} / {opportunity.offer_period ? PERIOD_LABELS[opportunity.offer_period] : "period"}</div>
                           <div className="mt-1 text-sm text-violet-800">{opportunity.offer_employment_type ? EMPLOYMENT_LABELS[opportunity.offer_employment_type] : "Employment type"} · Start {formatDate(opportunity.offer_start_date)} · {rosterLabel(opportunity.offer_roster)}</div>
                         </div>
@@ -403,7 +412,7 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
         ) : (
           <div className="mt-6 rounded-2xl border border-dashed border-slate-300 p-8 text-center">
             <div className="font-semibold text-slate-900">No opportunities yet</div>
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">When an employer sends a structured opportunity from a demand you match, it will appear here.</p>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">When an employer sends a opportunity from a demand you match, it will appear here.</p>
           </div>
         )}
       </section>

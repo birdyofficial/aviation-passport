@@ -1,5 +1,29 @@
 # Changelog
 
+## V0.13 — Verification & Trust Centre + Interview Scheduling
+- Added worker Trust tab with verification status for documentary credentials
+- Added platform Verification & Trust Centre at `/trust`
+- Verification queue supports Verify, Request information and Reject
+- Workers receive a Trust action badge when a verifier needs more information
+- Worker edits to verified documentary facts automatically return them to Pending
+- Work rights, licences, ratings, training and competencies use central documentary verification
+- Company authorisations, employment and aircraft exposure remain reserved for employer attestation
+- Private credential evidence can be opened by authorised platform verifiers through short-lived signed URLs
+- Initial development verifier is bootstrapped from the oldest existing Aviation Passport account
+- Removed the generic Conversation stage from the normal hiring pipeline
+- Interested candidates now move directly into Interviewing
+- Questions remain an inline conversation only when the worker actually asks one
+- Added repeatable Interview 1 / Interview 2 / Final Interview style rounds without cluttering the main pipeline
+- HR proposes exactly 3 interview times for every scheduling round
+- Candidate can accept one option or send a counter-proposed time
+- HR can accept the counter or send another set of 3 options
+- Interview times are stored as absolute timestamps and displayed in both interview timezone and candidate local timezone
+- Interview channels include In person, Microsoft Teams, Zoom, Google Meet, Webex, Discord, Phone and Other
+- Each interview round stores duration and joining details such as meeting link, passcode, location or phone instructions
+- Completed interview history is preserved and HR can schedule further rounds when necessary
+- Formal offers now follow at least one completed interview
+- Existing worker/employer action indicators now include interview scheduling responsibility
+
 ## V0.12.2 — Opportunities Badge Spacing
 - Moved the worker Opportunities action badge back to the far right
 - Reserved dedicated right-side space inside the Opportunities tab whenever the badge is visible

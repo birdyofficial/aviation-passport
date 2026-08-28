@@ -274,7 +274,7 @@ export default function TalentMatches({ demandId, demandStatus }: Props) {
           <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Demand-bound talent access</div>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Talent Matches</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            Review compatibility, then send the declared Open Demand as a structured opportunity. There is no generic recruiter message.
+            Review compatibility, then send the declared Open Demand as an opportunity. There is no generic recruiter message.
           </p>
         </div>
         <button type="button" disabled={loading} onClick={() => void loadMatches()} className="self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">

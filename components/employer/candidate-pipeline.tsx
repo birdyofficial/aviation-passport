@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import EmployerInterviewManager from "@/components/employer/interview-manager";
 
 type MoneyPeriod = "hour" | "day" | "week" | "month" | "year" | "one_off";
 type EmploymentType = "permanent" | "fixed_term" | "contractor" | "casual" | "part_time" | "self_employed" | "agency";
-type PipelineStage = "approached" | "interested" | "conversation" | "interview" | "offer" | "accepted" | "hired" | "declined" | "withdrawn" | "closed";
+type PipelineStage = "approached" | "interested" | "interview" | "offer" | "accepted" | "hired" | "declined" | "withdrawn" | "closed";
 
 type Allowance = {
   label: string;
@@ -61,8 +62,7 @@ type DemandDefaults = {
 const STAGE_LABELS: Record<PipelineStage, string> = {
   approached: "Approached",
   interested: "Interested",
-  conversation: "Conversation",
-  interview: "Interview",
+  interview: "Interviewing",
   offer: "Offer",
   accepted: "Accepted",
   hired: "Hired",
@@ -92,8 +92,7 @@ const PERIOD_LABELS: Record<MoneyPeriod, string> = {
 
 const PIPELINE_STEPS: { key: PipelineStage; label: string }[] = [
   { key: "interested", label: "Interested" },
-  { key: "conversation", label: "Conversation" },
-  { key: "interview", label: "Interview" },
+  { key: "interview", label: "Interviewing" },
   { key: "offer", label: "Offer" },
   { key: "accepted", label: "Accepted" },
   { key: "hired", label: "Hired" },
@@ -106,7 +105,7 @@ function stageRank(stage: PipelineStage) {
 function stageClasses(stage: PipelineStage) {
   if (stage === "hired") return "border-emerald-300 bg-emerald-100 text-emerald-800";
   if (stage === "accepted" || stage === "interested") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (stage === "offer" || stage === "interview" || stage === "conversation") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (stage === "offer" || stage === "interview") return "border-violet-200 bg-violet-50 text-violet-700";
   if (stage === "declined" || stage === "withdrawn" || stage === "closed") return "border-slate-200 bg-slate-100 text-slate-600";
   return "border-blue-200 bg-blue-50 text-blue-700";
 }
@@ -250,7 +249,7 @@ export default function CandidatePipeline({
     });
   }
 
-  async function advance(candidate: Candidate, stage: "conversation" | "interview" | "hired" | "withdrawn" | "closed") {
+  async function advance(candidate: Candidate, stage: "hired" | "withdrawn" | "closed") {
     setBusyId(candidate.opportunity_id);
     setNotice(null);
     try {
@@ -320,11 +319,11 @@ export default function CandidatePipeline({
       });
       if (error) throw error;
       setOfferOpportunityId(null);
-      setNotice({ type: "success", text: candidate.offer_id ? "Structured offer updated and re-sent." : "Structured offer sent." });
+      setNotice({ type: "success", text: candidate.offer_id ? "Offer updated and re-sent." : "Offer sent." });
       await loadPipeline();
       onActionChanged?.();
     } catch (error) {
-      setNotice({ type: "error", text: errorMessage(error, "Could not send structured offer.") });
+      setNotice({ type: "error", text: errorMessage(error, "Could not send offer.") });
     } finally {
       setBusyId(null);
     }
@@ -355,7 +354,7 @@ export default function CandidatePipeline({
 
   const metrics = {
     approached: candidates.filter((item) => item.pipeline_stage === "approached").length,
-    active: candidates.filter((item) => ["interested","conversation","interview","offer","accepted"].includes(item.pipeline_stage)).length,
+    active: candidates.filter((item) => ["interested","interview","offer","accepted"].includes(item.pipeline_stage)).length,
     offers: candidates.filter((item) => ["offer","accepted"].includes(item.pipeline_stage)).length,
     hired: candidates.filter((item) => item.pipeline_stage === "hired").length,
   };
@@ -367,7 +366,7 @@ export default function CandidatePipeline({
           <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Demand-bound hiring workflow</div>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Candidate Pipeline</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            Interest becomes a structured hiring process. Conversation, interview, formal offer and hire remain tied to this exact Open Demand.
+            Interested candidates move straight into interview scheduling. Questions remain a conversation only when the worker actually asks one.
           </p>
         </div>
         <button type="button" onClick={() => void loadPipeline()} className="self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Refresh</button>
@@ -418,7 +417,7 @@ export default function CandidatePipeline({
                 </div>
 
                 {!terminal && candidate.pipeline_stage !== "approached" ? (
-                  <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                  <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-5">
                     {PIPELINE_STEPS.map((step, index) => (
                       <div key={step.key} className={`rounded-lg border px-2 py-2 text-center text-[11px] font-semibold ${
                         candidate.pipeline_stage === step.key
@@ -435,7 +434,7 @@ export default function CandidatePipeline({
 
                 {candidate.worker_question ? (
                   <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-blue-500">Worker question</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-blue-500">Conversation · Worker question</div>
                     <div className="mt-1 text-sm text-blue-950">{candidate.worker_question}</div>
                     {candidate.employer_reply ? (
                       <div className="mt-3 rounded-lg border border-blue-100 bg-white px-3 py-2">
@@ -454,6 +453,18 @@ export default function CandidatePipeline({
                       <button type="button" onClick={() => { setReplyOpportunityId(candidate.opportunity_id); setReplyText(""); }} className="mt-3 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Reply</button>
                     )}
                   </div>
+                ) : null}
+
+                {["interested", "interview", "offer", "accepted", "hired"].includes(candidate.pipeline_stage) ? (
+                  <EmployerInterviewManager
+                    opportunityId={candidate.opportunity_id}
+                    pipelineStage={candidate.pipeline_stage}
+                    onActionChanged={() => {
+                      void loadPipeline();
+                      onActionChanged?.();
+                    }}
+                    onCreateOffer={() => openOffer(candidate)}
+                  />
                 ) : null}
 
                 {candidate.offer_id ? (
@@ -487,7 +498,7 @@ export default function CandidatePipeline({
 
                 {offerOpportunityId === candidate.opportunity_id ? (
                   <div className="mt-4 rounded-2xl border border-slate-300 bg-slate-50 p-5">
-                    <div className="text-sm font-semibold text-slate-950">{candidate.offer_id ? "Edit structured offer" : "Create structured offer"}</div>
+                    <div className="text-sm font-semibold text-slate-950">{candidate.offer_id ? "Edit offer" : "Create offer"}</div>
                     <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                       <Field label="Base compensation"><input type="number" min="0" step="0.01" className="input" value={offerForm.amount} onChange={(e) => setOfferForm({ ...offerForm, amount: e.target.value })} /></Field>
                       <Field label="Currency"><input maxLength={3} className="input uppercase" value={offerForm.currency} onChange={(e) => setOfferForm({ ...offerForm, currency: e.target.value.toUpperCase() })} /></Field>
@@ -540,7 +551,7 @@ export default function CandidatePipeline({
                     </div>
 
                     <div className="mt-5 flex flex-wrap gap-2">
-                      <button type="button" disabled={busyId === candidate.opportunity_id || !offerForm.amount} onClick={() => void sendOffer(candidate)} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{candidate.offer_id ? "Update & send offer" : "Send structured offer"}</button>
+                      <button type="button" disabled={busyId === candidate.opportunity_id || !offerForm.amount} onClick={() => void sendOffer(candidate)} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{candidate.offer_id ? "Update & send offer" : "Send offer"}</button>
                       <button type="button" onClick={() => setOfferOpportunityId(null)} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">Cancel</button>
                     </div>
                   </div>
@@ -548,9 +559,7 @@ export default function CandidatePipeline({
 
                 <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                   {candidate.pipeline_stage === "approached" ? <span className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">Waiting for worker response</span> : null}
-                  {candidate.pipeline_stage === "interested" ? <button type="button" disabled={busyId === candidate.opportunity_id} onClick={() => void advance(candidate, "conversation")} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white">Start conversation</button> : null}
-                  {candidate.pipeline_stage === "conversation" ? <button type="button" disabled={busyId === candidate.opportunity_id} onClick={() => void advance(candidate, "interview")} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white">Move to interview</button> : null}
-                  {["interested","conversation","interview","offer"].includes(candidate.pipeline_stage) ? <button type="button" disabled={busyId === candidate.opportunity_id} onClick={() => openOffer(candidate)} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700">{candidate.offer_id ? "Edit offer" : "Create offer"}</button> : null}
+                  {candidate.pipeline_stage === "offer" && candidate.offer_id ? <button type="button" disabled={busyId === candidate.opportunity_id} onClick={() => openOffer(candidate)} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700">Edit offer</button> : null}
                   {candidate.pipeline_stage === "accepted" ? <button type="button" disabled={busyId === candidate.opportunity_id} onClick={() => void advance(candidate, "hired")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Mark hired</button> : null}
                   {!terminal && candidate.pipeline_stage !== "approached" ? <button type="button" disabled={busyId === candidate.opportunity_id} onClick={() => void advance(candidate, "withdrawn")} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-700">Withdraw</button> : null}
                   {!terminal ? <button type="button" disabled={busyId === candidate.opportunity_id} onClick={() => void advance(candidate, "closed")} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Close</button> : null}
@@ -562,7 +571,7 @@ export default function CandidatePipeline({
       ) : (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 p-8 text-center">
           <div className="font-semibold text-slate-900">No candidates in the pipeline yet</div>
-          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">Send a structured opportunity from Talent Matches. Once the worker responds, the same demand becomes the hiring workflow.</p>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">Send an opportunity from Talent Matches. Once the worker responds, the same demand becomes the hiring workflow.</p>
         </div>
       )}
     </section>
