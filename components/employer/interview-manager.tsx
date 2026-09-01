@@ -282,6 +282,8 @@ export default function EmployerInterviewManager({
   }
 
   async function cancelRound(round: InterviewRound) {
+    if (!window.confirm(`Cancel ${round.title}? The interview history will be preserved and HR can schedule a new set of times.`)) return;
+
     setBusyId(round.interview_id);
     setNotice(null);
     try {
@@ -289,11 +291,11 @@ export default function EmployerInterviewManager({
         p_interview_id: round.interview_id,
       });
       if (error) throw error;
-      setNotice({ type: "success", text: `${round.title} cancelled.` });
+      setNotice({ type: "success", text: `${round.title} cancelled. You can now schedule another interview.` });
       await loadRounds();
       onActionChanged?.();
     } catch (error) {
-      setNotice({ type: "error", text: errorMessage(error, "Could not cancel interview round.") });
+      setNotice({ type: "error", text: errorMessage(error, "Could not cancel interview.") });
     } finally {
       setBusyId(null);
     }
@@ -381,7 +383,7 @@ export default function EmployerInterviewManager({
                     <textarea className="input min-h-16" value={outcomeNotes[round.interview_id] ?? ""} onChange={(e) => setOutcomeNotes((current) => ({ ...current, [round.interview_id]: e.target.value }))} placeholder="Optional outcome note for the hiring record…" />
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button type="button" disabled={busyId === round.interview_id} onClick={() => void completeRound(round)} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Mark interview completed</button>
-                      <button type="button" disabled={busyId === round.interview_id} onClick={() => void cancelRound(round)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Cancel round</button>
+                      <button type="button" disabled={busyId === round.interview_id} onClick={() => void cancelRound(round)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Cancel interview</button>
                     </div>
                   </div>
                 </div>
@@ -395,7 +397,7 @@ export default function EmployerInterviewManager({
               ) : null}
 
               {round.interview_status === "proposed" ? (
-                <button type="button" disabled={busyId === round.interview_id} onClick={() => void cancelRound(round)} className="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Cancel round</button>
+                <button type="button" disabled={busyId === round.interview_id} onClick={() => void cancelRound(round)} className="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Cancel interview</button>
               ) : null}
             </div>
           ))}
@@ -442,6 +444,24 @@ export default function EmployerInterviewManager({
           <div className="mt-4 flex flex-wrap gap-2">
             <button type="button" disabled={Boolean(busyId)} onClick={() => void submitProposal()} className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Send 3 options</button>
             <button type="button" onClick={() => { setFormMode(null); setEditingInterviewId(null); }} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Cancel</button>
+          </div>
+        </div>
+      ) : null}
+
+      {activeRound?.interview_status === "confirmed" && pipelineStage === "interview" && !formMode ? (
+        <div className="mt-4 border-t border-violet-100 pt-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+            The next hiring actions become available after this interview has taken place and HR marks it completed.
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled className="cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400">
+              Schedule another interview
+            </button>
+            {onCreateOffer ? (
+              <button type="button" disabled className="cursor-not-allowed rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-400">
+                Create offer
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

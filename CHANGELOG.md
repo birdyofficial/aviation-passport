@@ -1,5 +1,23 @@
 # Changelog
 
+## V0.13.1 — Interview Cancellation + Next-Step Clarity
+- Added Cancel interview for the worker after an interview time is confirmed
+- HR can cancel proposed or confirmed interviews using the same preserved interview history
+- Either side cancelling returns the workflow to HR for a new set of three interview options
+- Employer action indicators now flag cancelled interviews that need a reschedule / next decision
+- During a confirmed interview, Schedule another interview and Create offer remain visible but disabled
+- Added an explanatory note that those next actions unlock after the interview is completed
+- Renamed employer “Cancel round” wording to the simpler “Cancel interview”
+- Cancelled employer openings now remain visible in each affected worker's Opportunities history as **Cancelled**
+- Soft-deleting a cancelled demand removes it only from the employer register, not the worker's historical opportunity record
+- Cancelling a demand cleanly closes active candidate pipelines, cancels active interviews and withdraws sent offers
+- Cancelled openings no longer create worker action badges or allow further candidate actions
+- Workers can Delete from list after declining an opportunity or when the employer cancels the opening
+- Deleting from the worker list is a personal hide; the underlying marketplace history remains preserved
+- Hired opportunities can never be removed from the worker Opportunities list
+
+
+
 ## V0.13 — Verification & Trust Centre + Interview Scheduling
 - Added worker Trust tab with verification status for documentary credentials
 - Added platform Verification & Trust Centre at `/trust`

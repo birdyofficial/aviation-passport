@@ -144,6 +144,26 @@ export default function WorkerInterviewRounds({
     }
   }
 
+  async function cancelRound(round: InterviewRound) {
+    if (!window.confirm(`Cancel ${round.title}? HR will be notified that a new interview time needs to be scheduled.`)) return;
+
+    setBusyId(round.interview_id);
+    setNotice(null);
+    try {
+      const { error } = await supabase.rpc("cancel_interview_round", {
+        p_interview_id: round.interview_id,
+      });
+      if (error) throw error;
+      setNotice({ type: "success", text: `${round.title} cancelled. HR can now send a new set of interview times.` });
+      await loadRounds();
+      onActionChanged?.();
+    } catch (error) {
+      setNotice({ type: "error", text: errorMessage(error, "Could not cancel interview.") });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!rounds.length) return null;
 
   return (
@@ -210,6 +230,19 @@ export default function WorkerInterviewRounds({
                 <div className="mt-1 text-lg font-semibold text-blue-950">{formatInZone(round.selected_start_at, round.timezone_name)}</div>
                 {candidateZone !== round.timezone_name ? <div className="mt-1 text-sm font-semibold text-blue-800">Your local time: {formatInZone(round.selected_start_at, candidateZone)}</div> : null}
                 <div className="mt-3 text-sm text-blue-900"><strong>{CHANNEL_LABELS[round.channel] ?? round.channel}</strong>{round.connection_details ? ` · ${round.connection_details}` : ""}</div>
+                <div className="mt-4 border-t border-blue-200 pt-3">
+                  <button
+                    type="button"
+                    disabled={busyId === round.interview_id}
+                    onClick={() => void cancelRound(round)}
+                    className="rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50"
+                  >
+                    Cancel interview
+                  </button>
+                  <div className="mt-2 text-xs leading-5 text-blue-700">
+                    If you can no longer attend, cancelling keeps the interview history and returns scheduling to HR so they can send three new options.
+                  </div>
+                </div>
               </div>
             ) : null}
 
@@ -219,7 +252,7 @@ export default function WorkerInterviewRounds({
               </div>
             ) : null}
 
-            {round.interview_status === "cancelled" ? <div className="mt-3 text-sm text-slate-500">This interview round was cancelled.</div> : null}
+            {round.interview_status === "cancelled" ? <div className="mt-3 text-sm text-slate-500">This interview was cancelled. HR can schedule and send a new set of interview options.</div> : null}
           </div>
         ))}
       </div>

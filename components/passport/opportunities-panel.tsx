@@ -62,6 +62,7 @@ type Opportunity = {
   offer_sent_at: string | null;
   offer_accepted_at: string | null;
   hired_at: string | null;
+  demand_cancelled: boolean;
 };
 
 const PIPELINE_LABELS: Record<PipelineStage, string> = {
@@ -206,6 +207,26 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
     }
   }
 
+  async function dismissOpportunity(opportunity: Opportunity) {
+    if (!window.confirm("Delete this opportunity from your list? It will disappear from your Opportunities view.")) return;
+
+    setBusyId(opportunity.opportunity_id);
+    setNotice(null);
+    try {
+      const { error } = await supabase.rpc("dismiss_my_opportunity", {
+        p_opportunity_id: opportunity.opportunity_id,
+      });
+      if (error) throw error;
+      setNotice({ type: "success", text: "Opportunity deleted from your list." });
+      await loadOpportunities();
+      onActionCountChanged?.();
+    } catch (error) {
+      setNotice({ type: "error", text: errorMessage(error, "Could not delete opportunity from your list.") });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function respondInitial(opportunity: Opportunity, action: "interested" | "question" | "declined") {
     setBusyId(opportunity.opportunity_id);
     setNotice(null);
@@ -289,23 +310,35 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
             {opportunities.map((opportunity) => {
               const location = [opportunity.city, opportunity.country_code ? countryLabel(opportunity.country_code) : null].filter(Boolean).join(", ");
               const anonymousUnrevealed = opportunity.worker_visibility === "anonymous_market" && !opportunity.identity_revealed;
-              const terminal = ["declined","withdrawn","closed","hired"].includes(opportunity.pipeline_stage);
+              const demandCancelled = Boolean(opportunity.demand_cancelled) && opportunity.pipeline_stage !== "hired";
+              const terminal = demandCancelled || ["declined","withdrawn","closed","hired"].includes(opportunity.pipeline_stage);
               const rank = stageRank(opportunity.pipeline_stage);
-              const offerActive = opportunity.pipeline_stage === "offer" && opportunity.offer_status === "sent";
+              const offerActive = !demandCancelled && opportunity.pipeline_stage === "offer" && opportunity.offer_status === "sent";
+              const visibleStageLabel = demandCancelled ? "Cancelled" : PIPELINE_LABELS[opportunity.pipeline_stage];
+              const canDeleteFromList = opportunity.pipeline_stage !== "hired" && (demandCancelled || opportunity.pipeline_stage === "declined");
 
               return (
-                <article key={opportunity.opportunity_id} className="rounded-2xl border border-slate-200 p-5">
+                <article key={opportunity.opportunity_id} className={`rounded-2xl border p-5 ${demandCancelled ? "border-slate-300 bg-slate-50/60" : "border-slate-200"}`}>
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-xl font-semibold tracking-tight text-slate-950">{opportunity.public_title}</h3>
-                        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${stageClasses(opportunity.pipeline_stage)}`}>{PIPELINE_LABELS[opportunity.pipeline_stage]}</span>
+                        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${demandCancelled ? "border-slate-300 bg-slate-200 text-slate-700" : stageClasses(opportunity.pipeline_stage)}`}>{visibleStageLabel}</span>
                         {opportunity.organisation_verified ? <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Verified organisation</span> : null}
                       </div>
                       <div className="mt-1 text-sm text-slate-700">{opportunity.organisation_name} · {opportunity.profession}{opportunity.discipline ? ` · ${opportunity.discipline}` : ""}</div>
                       <div className="mt-1 text-xs text-slate-500">{location || "Location not specified"} · Sent {formatDate(opportunity.sent_at)}</div>
                     </div>
                   </div>
+
+                  {demandCancelled ? (
+                    <div className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3">
+                      <div className="text-sm font-semibold text-slate-900">Opening cancelled by employer</div>
+                      <div className="mt-1 text-xs leading-5 text-slate-600">
+                        This opportunity is no longer active. It remains in your Opportunities history so you keep a record of the approach and any interview or offer activity that took place.
+                      </div>
+                    </div>
+                  ) : null}
 
                   {anonymousUnrevealed ? <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">You are still anonymous. Asking a question does not reveal you. Choosing Interested reveals your employer-visible Passport only for this opportunity.</div> : null}
 
@@ -331,7 +364,7 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
                     <Fact label="Expected start" value={formatDate(opportunity.expected_start_date)} />
                     <Fact label="Sponsorship" value={opportunity.sponsorship_available ? "Available" : "Not offered"} />
                     <Fact label="Relocation" value={opportunity.relocation_assistance ? "Assistance offered" : "Not specified"} />
-                    <Fact label="Stage" value={PIPELINE_LABELS[opportunity.pipeline_stage]} />
+                    <Fact label="Stage" value={visibleStageLabel} />
                   </div>
 
                   {opportunity.mandatory_requirements.length ? <TagSection label="Mandatory requirements" items={opportunity.mandatory_requirements} kind="mandatory" /> : null}
@@ -346,7 +379,7 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
                     </div>
                   ) : null}
 
-                  {["interested", "interview", "offer", "accepted", "hired"].includes(opportunity.pipeline_stage) ? (
+                  {!demandCancelled && ["interested", "interview", "offer", "accepted", "hired"].includes(opportunity.pipeline_stage) ? (
                     <WorkerInterviewRounds
                       opportunityId={opportunity.opportunity_id}
                       onActionChanged={() => {
@@ -383,7 +416,7 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
                     </div>
                   ) : null}
 
-                  {opportunity.pipeline_stage === "approached" ? (
+                  {!demandCancelled && opportunity.pipeline_stage === "approached" ? (
                     <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                       <button type="button" disabled={busyId === opportunity.opportunity_id} onClick={() => void respondInitial(opportunity, "interested")} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Interested{anonymousUnrevealed ? " — reveal to employer" : ""}</button>
                       <button type="button" disabled={busyId === opportunity.opportunity_id} onClick={() => { setQuestionId(opportunity.opportunity_id); setQuestionMode("initial"); setQuestion(""); }} className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700">Ask a question{anonymousUnrevealed ? " anonymously" : ""}</button>
@@ -391,7 +424,7 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
                     </div>
                   ) : null}
 
-                  {questionId === opportunity.opportunity_id ? (
+                  {!demandCancelled && questionId === opportunity.opportunity_id ? (
                     <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4">
                       <label className="block text-sm font-semibold text-blue-950">{questionMode === "offer" ? "Question about the formal offer" : `Question for ${opportunity.organisation_name}`}</label>
                       <textarea className="input mt-2 min-h-24" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask a factual question…" />
@@ -403,8 +436,24 @@ export default function OpportunitiesPanel({ onActionCountChanged }: { onActionC
                     </div>
                   ) : null}
 
-                  {opportunity.pipeline_stage === "accepted" ? <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">You accepted the formal offer. The employer can now complete the hire in Aviation Passport.</div> : null}
+                  {!demandCancelled && opportunity.pipeline_stage === "accepted" ? <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">You accepted the formal offer. The employer can now complete the hire in Aviation Passport.</div> : null}
                   {opportunity.pipeline_stage === "hired" ? <div className="mt-5 rounded-xl border border-emerald-300 bg-emerald-100 px-4 py-3 text-sm font-semibold text-emerald-900">Hired · Congratulations. This outcome is now recorded against the original demand.</div> : null}
+
+                  {canDeleteFromList ? (
+                    <div className="mt-5 border-t border-slate-200 pt-4">
+                      <button
+                        type="button"
+                        disabled={busyId === opportunity.opportunity_id}
+                        onClick={() => void dismissOpportunity(opportunity)}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Delete from list
+                      </button>
+                      <div className="mt-2 text-xs leading-5 text-slate-500">
+                        Removes this item from your Opportunities view. Hired opportunities always remain.
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
